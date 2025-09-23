@@ -196,7 +196,7 @@ function utility.convertPrincess(beeName, sideConfig, droneReq, breeder, acclima
                         print("Scanning princess...|正在扫描公主蜂")
                         princessConverted = utility.checkPrincess(sideConfig) --This call will move the princess to sideConfig.output
                         if (not princessConverted) then
-                            print("Princess is not a perfect copy! Continuing.")
+                            print("Princess is not a perfect copy! Continuing.|被转换的公主蜂还不是纯合子，继续压印基因")
                             safeTransfer(sideConfig.output,sideConfig.breeder, 1, 1, "output", "breeder") --Move princess back to input
                             safeTransfer(sideConfig.storage, sideConfig.breeder, 1, droneSlot, "storage", "breeder") --Move drone from storage to breed slot
                         end
@@ -1726,7 +1726,7 @@ function safeTransfer(sideIn, sideOut, amount, slot, sideInName, sideOutName, sl
 
     if transferSuccess == 0 and transposer.getStackInSlot(sideIn, slot) ~= nil then
         if not noWarn then
-            print(string.format("TRANSFER FROM SLOT %d OF CONTAINER: %s TO CONTAINER: %s FAILED! PLEASE DO IT MANUALLY OR CLEAN THE %s CONTAINER!", slot, sideInName:upper(), sideOutName:upper(), sideOutName:upper()))
+            print(string.format("TRANSFER FROM SLOT %d OF CONTAINER: %s TO CONTAINER: %s FAILED! PLEASE DO IT MANUALLY OR CLEAN THE %s CONTAINER!|转移物品失败，是不是箱子满了或者有杂物没拿出来", slot, sideInName:upper(), sideOutName:upper(), sideOutName:upper()))
         end
         while transposer.getStackInSlot(sideIn, slot) ~= nil do
             os.sleep(1)
