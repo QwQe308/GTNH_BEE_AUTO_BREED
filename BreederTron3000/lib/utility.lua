@@ -240,7 +240,7 @@ function utility.populateBee(beeName, sideConfig, targetCount)
     print("Populating " .. beeName .. " bee.|正在繁殖 " .. beeName .. " 的雄蜂，保证种群不会断代.")
     local princessSlot, droneSlot = utility.findPairString(beeName, beeName, sideConfig)
     if(princessSlot == -1 or droneSlot == -1) then
-        print("Couldn't find princess or drone! Aborting.")
+        print("Couldn't find princess or drone! Aborting.|繁殖失败，无法找到纯合子的公主蜂和雄蜂")
         return
     end
     local princess = transposer.getStackInSlot(sideConfig.storage, princessSlot)
@@ -313,7 +313,7 @@ end
 
 
 function utility.breed(beeName, breedData, sideConfig, robotMode)
-    print("Breeding " .. beeName .. " bee.|正在尝试杂交 " .. beeName .. " bee.")
+    print("Breeding " .. beeName .. " bee.|正在尝试杂交 " .. beeName .. " 的蜜蜂.")
     local basePrincessSlot, baseDroneSlot = utility.findPair(breedData, sideConfig)
     if basePrincessSlot == -1 or baseDroneSlot == -1 then
         print("Couldn't find the parents of " .. beeName .. " bee! Aborting.")
@@ -343,9 +343,6 @@ function utility.breed(beeName, breedData, sideConfig, robotMode)
         print("Actual chance unknown (using alveary). MIGHT PRODUCE OTHER MUTATIONS!")
     end
     local requirements = breedData.specialConditions
-    if lastRequirements == nil then
-        lastRequirements = requirements
-    end
     local botPlaced = false
     if next(requirements) ~= nil then
         print("This bee has the following special requirements: |该目标种群的突变有如下特殊要求：")
