@@ -194,7 +194,7 @@ if programMode:lower() == "breed" then
             end
         end
         if not bredBee then
-            print("Cannot breed any required bee with bees in storage! Aborting.|无法使用存储中的蜜蜂育种任何所需的蜜蜂！中止程序。请尝试先培养其父代种排查原因。")
+            print("Cannot breed any required bee with bees in storage! Aborting.|无法使用存储中的蜜蜂育种任何所需的蜜蜂！中止程序。请尝试先培养其父代种排查原因，可能需要使用如僧侣蜂水生蜂等无法繁殖突变的蜜蜂。")
             os.exit()
         end
     end
