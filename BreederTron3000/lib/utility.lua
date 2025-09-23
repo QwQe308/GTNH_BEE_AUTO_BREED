@@ -7,6 +7,7 @@ local serialization = require("serialization")
 local utility = {}
 local transposer = component.transposer
 local modem = nil
+local lastRequirements = nil
 if next(component.list("modem")) ~= nil then
     modem = component.modem
 end
@@ -342,6 +343,9 @@ function utility.breed(beeName, breedData, sideConfig, robotMode)
         print("Actual chance unknown (using alveary). MIGHT PRODUCE OTHER MUTATIONS!")
     end
     local requirements = breedData.specialConditions
+    if lastRequirements == nil then
+        lastRequirements = requirements
+    end
     local botPlaced = false
     if next(requirements) ~= nil then
         print("This bee has the following special requirements: |该目标种群的突变有如下特殊要求：")
@@ -364,19 +368,24 @@ function utility.breed(beeName, breedData, sideConfig, robotMode)
         if #requirements == 1 and botPlaced then
             print("The robot dealt with all of the requirements! Proceeding.")
         else
-            print("Type \"ok\" when you've made sure the conditions are met or type \"skip\" to skip this breed (You made this bee somewhere else).|请输入ok以代表你已经确认其满足上述条件，或者输入skip跳过本次育种（然后你自己去其它地方完成该育种）")
-            local ans = io.read()
-            while type(ans) ~= "string" or ans == "" do
+            --询问用户是否满足条件
+            if lastRequirements ~= requirements then
                 print("Type \"ok\" when you've made sure the conditions are met or type \"skip\" to skip this breed (You made this bee somewhere else).|请输入ok以代表你已经确认其满足上述条件，或者输入skip跳过本次育种（然后你自己去其它地方完成该育种）")
-                ans = io.read()
-            end
-            if ans == "skip" then
-                print("Updating the bee list...")
-                utility.listBeesInStorage(sideConfig)
-                goto skip
+                local ans = io.read()
+                while type(ans) ~= "string" or ans == "" do
+                    print("Type \"ok\" when you've made sure the conditions are met or type \"skip\" to skip this breed (You made this bee somewhere else).|请输入ok以代表你已经确认其满足上述条件，或者输入skip跳过本次育种（然后你自己去其它地方完成该育种）")
+                    ans = io.read()
+                end
+                if ans == "skip" then
+                    print("Updating the bee list...")
+                    utility.listBeesInStorage(sideConfig)
+                    goto skip
+                end
+                lastRequirements = requirements
+            else
+                print("You have already confirmed the same mutation conditions previously, so we will not ask you to confirm them again.|你上次已经确认过相同的突变条件，不再向你确认")
             end
         end
-        
     end
 
     safeTransfer(sideConfig.storage,sideConfig.breeder, 1, basePrincessSlot, "storage", "breeder")
