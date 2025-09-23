@@ -104,13 +104,13 @@ function utility.listBeesInStorage(sideConfig)
         local bee = transposer.getStackInSlot(sideConfig.storage, i)
         if bee ~= nil then
             if bee.individual ~= nil and bee.individual.active == nil then
-                print(string.format("Bee in slot %d is unscanned! Sending to scanner.", i))
+                print(string.format("Bee in slot %d is unscanned! Sending to scanner.|在第%d个栏位的蜜蜂还没有扫描，正在送去扫描", i , i))
                 safeTransfer(sideConfig.storage, sideConfig.scanner, 64, i, "storage", "scanner")
                 while (transposer.getStackInSlot(sideConfig.output, 1) == nil) do
                     os.sleep(1)
                 end
                 bee = transposer.getStackInSlot(sideConfig.output, 1)
-                print("Sending back to storage.")
+                print("Sending back to storage.|送回存储箱")
                 safeTransfer(sideConfig.output, sideConfig.storage, 64, 1, "output", "storage")
             end
             local species,type = utility.getItemName(bee)
