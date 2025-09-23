@@ -130,7 +130,7 @@ end
 --Converts a princess to the given bee type
 --Assumes bee is scanned (Only scanned bees expose genes)
 function utility.convertPrincess(beeName, sideConfig, droneReq, breeder, acclimatiserConfig)
-    print("Converting princess to " .. beeName)
+    print("Converting princess to " .. beeName .. "|正在将公主蜂转换为 " .. beeName)
     local droneSlot = nil
     local targetGenes = nil
     local princess = transposer.getStackInSlot(sideConfig.breeder, 1)
@@ -175,7 +175,7 @@ function utility.convertPrincess(beeName, sideConfig, droneReq, breeder, acclima
         return
     end
     --Insert bees into the apiary
-    print("Converting " .. princessName .. " princess to " .. beeName)
+    print("Converting " .. princessName .. " princess to " .. beeName .. "|正在将 " .. princessName .. " 公主蜂转换为 " .. beeName)
     --First number is the amount of items transferred, the second is the slot number of the container items are transferred to
     --Move only 1 drone at a time to leave the apiary empty after the cycling is complete (you can't extract from input slots)
     safeTransfer(sideConfig.storage,sideConfig.breeder, 1, droneSlot, "storage", "breeder")
@@ -216,8 +216,10 @@ function utility.convertPrincess(beeName, sideConfig, droneReq, breeder, acclima
                     end
                 end
             end
-        elseif acclimatiserConfig.useAcclimatiser and breeder ~= nil then
-            utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig)
+        elseif acclimatiserConfig ~= nil then
+            if acclimatiserConfig.useAcclimatiser and breeder ~= nil then
+                utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig)
+            end
         end
         os.sleep(1)
     end
@@ -229,7 +231,7 @@ function utility.convertPrincess(beeName, sideConfig, droneReq, breeder, acclima
         end
     end
     safeTransfer(sideConfig.output,sideConfig.storage, 1, 1, "output", "storage")
-    print(beeName .. " princess moved to storage.")
+    print(beeName .. " princess moved to storage.|" .. beeName .. " 公主蜂已移至存储箱。")
 end
 
 function utility.populateBee(beeName, sideConfig, targetCount)
@@ -395,7 +397,7 @@ function utility.breed(beeName, breedData, sideConfig, robotMode)
         while(not cycleIsDone(sideConfig)) do
             os.sleep(1)
         end
-        print("Scanning bees...")
+        print("Scanning bees...|扫描蜜蜂中")
         scanCount = utility.dumpBreeder(sideConfig, true)
         if scanCount == 0 then
             print("HEY! YOU TOOK OUT THE BEE! PUT A PRINCESS + DRONE IN THE BREEDER!")
@@ -409,7 +411,7 @@ function utility.breed(beeName, breedData, sideConfig, robotMode)
             os.sleep(1)
         end
 
-        print("Assessing...")
+        print("Assessing...|分析中")
         princess = nil
         princessPureness = 0
         princessSlot = nil
@@ -483,7 +485,7 @@ function utility.breed(beeName, breedData, sideConfig, robotMode)
                 safeTransfer(sideConfig.output, sideConfig.breeder, 1, princessSlot, "output", "breeder")
                 dumpOutput(sideConfig, scanCount)
             else
-                print("Couldn't find a good reserve drone! converting back to base species.")
+                print("Couldn't find a good reserve drone! converting back to base species.|找不到一个好的备用雄蜂！准备重新从父代种开始杂交。")
                 safeTransfer(sideConfig.output,sideConfig.breeder, 1, princessSlot, "output", "breeder") -- Move to breeder for conversion
                 for i=1,scanCount do --Get rid of the useless bees
                     safeTransfer(sideConfig.output, sideConfig.garbage, 64, i, "output", "garbage")
@@ -505,7 +507,7 @@ function utility.breed(beeName, breedData, sideConfig, robotMode)
             safeTransfer(sideConfig.output,sideConfig.garbage, 64, i, "output", "garbage") --Move irrelevant drones to garbage
         end
     end
-    print("Breeding finished. " .. beeName .. " princess and its drones moved to storage.")
+    print("Breeding finished. " .. beeName .. " princess and its drones moved to storage.|育种完成。" .. beeName .. " 公主蜂及其雄蜂已移至存储。")
     ::skip::
 end
 
@@ -581,7 +583,7 @@ function utility.breedByMutatron(beeName, breedData, sideConfig, breeder, acclim
         while(not cycleIsDone(sideConfig)) do
             os.sleep(1)
         end
-        print("Scanning bees...")
+        print("Scanning bees...|扫描蜜蜂中")
         scanCount = utility.dumpBreeder(sideConfig, true)
         if scanCount == 0 then
             print("HEY! YOU TOOK OUT THE BEE! PUT A PRINCESS + DRONE IN THE BREEDER!")
@@ -595,7 +597,7 @@ function utility.breedByMutatron(beeName, breedData, sideConfig, breeder, acclim
             os.sleep(1)
         end
 
-        print("Assessing...")
+        print("Assessing...|分析中")
         princessPureness = 0
         princessSlot = nil
         bestDronePureness = -1
@@ -667,7 +669,7 @@ function utility.breedByMutatron(beeName, breedData, sideConfig, breeder, acclim
             safeTransfer(sideConfig.output,sideConfig.garbage, 64, i, "output", "garbage") --Move irrelevant drones to garbage
         end
     end
-    print("Breeding finished. " .. beeName .. " princess and its drones moved to storage.")
+    print("Breeding finished. " .. beeName .. " princess and its drones moved to storage.|育种完成。" .. beeName .. " 公主蜂及其雄蜂已移至存储。")
 
     return true
 end
@@ -783,7 +785,7 @@ function utility.imprintFromTemplate(beeName, sideConfig, templateGenes)
             utility.dumpDrones(beeName, sideConfig)
             safeTransfer(sideConfig.output, sideConfig.storage, 1, princessSlot, "output", "storage")
             safeTransfer(sideConfig.output, sideConfig.storage, 64, bestDroneSlot, "output", "storage")
-            print("Imprinted bee moved to storage.")
+            print("Imprinted bee moved to storage.|基因压印蜜蜂已移至存储箱。")
             dumpOutput(sideConfig, scanCount)
             return true
         end
@@ -1613,7 +1615,7 @@ function utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig
     end
 
     -- finally we put the queen back to the breeder
-    print("Adjusted queen moved to breeder.")
+    print("Adjusted queen moved to breeder.|调整后的蜂后已移至蜂箱。")
     safeTransfer(sideConfig.scanner, sideConfig.breeder, 1, config.slot.scanner.ToBeAcc, "scanner", "breeder")
 
     if (not breeder.canBreed()) and transposer.getStackInSlot(sideConfig.breeder, 1) ~= nil then
