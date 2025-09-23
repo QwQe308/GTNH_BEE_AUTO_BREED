@@ -192,7 +192,7 @@ function utility.convertPrincess(beeName, sideConfig, droneReq, breeder, acclima
                 if item ~= nil then
                     local species,type = utility.getItemName(item)
                     if type == "Drone" and item.size == targetGenes.active.fertility and species == beeName then
-                        print("Scanning princess...")
+                        print("Scanning princess...|正在扫描公主蜂")
                         princessConverted = utility.checkPrincess(sideConfig) --This call will move the princess to sideConfig.output
                         if (not princessConverted) then
                             print("Princess is not a perfect copy! Continuing.")
@@ -223,7 +223,7 @@ function utility.convertPrincess(beeName, sideConfig, droneReq, breeder, acclima
         end
         os.sleep(1)
     end
-    print("Conversion complete!")
+    print("Conversion complete!|完成公主蜂的目标种群转换工作")
     for i=3,9 do --clean up the drones
         local item = transposer.getStackInSlot(sideConfig.breeder, i)
         if item ~= nil then
@@ -248,7 +248,7 @@ function utility.populateBee(beeName, sideConfig, targetCount)
         print("This bee has 1 fertility! I can't populate this! Aborting.")
         return
     end
-    print(beeName .. " bees found!")
+    print(beeName .. " bees found!|" .. beeName .. " 种群的纯合子蜜蜂对已找到")
     --Because the drones in storage are scanned you can only insert 1. the rest will be taken from output of the following cycles
     safeTransfer(sideConfig.storage, sideConfig.breeder, 1, princessSlot, "storage", "breeder")
     safeTransfer(sideConfig.storage, sideConfig.breeder, 1, droneSlot, "storage", "breeder")
@@ -263,7 +263,7 @@ function utility.populateBee(beeName, sideConfig, targetCount)
                 if candidate ~= nil then
                     local _,type = utility.getItemName(candidate)
                     if type == "Drone" then
-                        print("Drones located in slot: " .. i .. "已定位雄蜂在蜂箱的第" .. i .. "格")
+                        print("Drones located in slot: " .. i .. "|已定位雄蜂在蜂箱的第" .. i .. "格")
                         if droneOutput ~= nil then
                             print("HEY! YOU'RE NOT SUPPOSED TO MAKE MORE THAN 2 DRONE STACKS WHEN POPULATING! TERMINATING PROGRAM.|程序运行繁育过程中，不应该有蜜蜂已经在蜂箱中，程序终止（请先清空蜂箱再启动程序）")
                             os.exit()
@@ -274,7 +274,7 @@ function utility.populateBee(beeName, sideConfig, targetCount)
             end
         else
             item = transposer.getStackInSlot(sideConfig.breeder, droneOutput)
-            print("Populating progress: " .. item.size .. "/" .. targetCount .. "繁殖进度: " .. item.size .. "/" .. targetCount)
+            print("Populating progress: " .. item.size .. "/" .. targetCount .. "|繁殖进度: " .. item.size .. "/" .. targetCount)
             if (item.size < targetCount) then
                 safeTransfer(sideConfig.breeder,sideConfig.breeder, 1, droneOutput, "breeder", "breeder") --Move a single drone back to the breeding slot
                 for i=3,9 do
