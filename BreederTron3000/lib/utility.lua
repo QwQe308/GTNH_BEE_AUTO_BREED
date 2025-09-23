@@ -29,7 +29,7 @@ function utility.createBreedingChain(beeName, breeder, sideConfig, existingBees)
         for child,parentPair in pairs(queue) do
             local leftName = parentPair.allele1.name
             local rightName = parentPair.allele2.name
-            print("Processing parents of " .. child .. ": " .. leftName .. " and " .. rightName)
+            print("Processing parents of " .. child .. ": " .. leftName .. " and " .. rightName .. "|正在处理杂交的迭代种群 " .. child .. "，其父代种群为: " .. leftName .. " 和 " .. rightName)
 
             local leftParents = utility.processBee(leftName, breeder, child)
             local rightParents = utility.processBee(rightName, breeder, child)
@@ -81,13 +81,13 @@ end
 function utility.resolveConflict(beeName, parentPairs, child)
     local choice = nil
 
-    print("Detected conflict! Please choose one of the following parents for the " .. beeName .. " bee (Breeds into " .. child .. " bee): ")
+    print("Detected conflict! Please choose one of the following parents for the " .. beeName .. " bee (Breeds into " .. child .. " bee): |发现杂交路径分歧，你可以选择该蜂种的杂交父代： " .. beeName .. "  (关于" .. child .. " 种群的繁育路线):")
     for i,pair in pairs(parentPairs) do
         print(i .. ": " .. pair.allele1.name .. " + " .. pair.allele2.name)
     end
 
     while(choice == nil or choice < 1 or choice > #parentPairs) do
-        print("Please type the number of the correct pair")
+        print("Please type the number of the correct pair|请选择适合你的繁育路线方案")
         choice = io.read("*n")
     end
 
