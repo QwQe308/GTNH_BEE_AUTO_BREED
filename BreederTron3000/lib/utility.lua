@@ -266,7 +266,7 @@ function utility.populateBee(beeName, sideConfig, targetCount)
                     if type == "Drone" then
                         print("Drones located in slot: " .. i .. "|已定位雄蜂在蜂箱的第" .. i .. "格")
                         if droneOutput ~= nil then
-                            print("HEY! YOU'RE NOT SUPPOSED TO MAKE MORE THAN 2 DRONE STACKS WHEN POPULATING! TERMINATING PROGRAM.|程序运行繁育过程中，不应该有蜜蜂已经在蜂箱中，程序终止（请先清空蜂箱再启动程序）")
+                            print("HEY! YOU'RE NOT SUPPOSED TO MAKE MORE THAN 2 DRONE STACKS WHEN POPULATING! TERMINATING PROGRAM.|程序运行繁育过程中，不应该有蜜蜂已经在蜂箱中，程序终止（请先清空蜂箱，并保证存储箱中没有杂合子再启动程序）")
                             os.exit()
                         end
                         droneOutput = i
