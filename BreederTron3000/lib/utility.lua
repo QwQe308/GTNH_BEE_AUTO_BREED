@@ -82,13 +82,13 @@ end
 function utility.resolveConflict(beeName, parentPairs, child)
     local choice = nil
 
-    print("Detected conflict! Please choose one of the following parents for the " .. beeName .. " bee (Breeds into " .. child .. " bee): |发现杂交路径分歧，你可以选择该蜂种的杂交父代： " .. beeName .. "  (关于" .. child .. " 种群的繁育路线):")
+    print("Detected conflict! Please choose one of the following parents for the " .. beeName .. " bee (Breeds into " .. child .. " bee): |发现蜜蜂重名，请检查NEI确定是蜜蜂种 " .. beeName .. "是以下哪个路线培育上来的  (关于后续" .. child .. " 子代的突变):")
     for i,pair in pairs(parentPairs) do
         print(i .. ": " .. pair.allele1.name .. " + " .. pair.allele2.name)
     end
 
     while(choice == nil or choice < 1 or choice > #parentPairs) do
-        print("Please type the number of the correct pair|请选择适合你的繁育路线方案")
+        print("Please type the number of the correct pair|请选择正确的突变路线方案")
         choice = io.read("*n")
     end
 
@@ -471,7 +471,7 @@ function utility.breed(beeName, breedData, sideConfig, robotMode)
             end
             local princessSpecies = princess.individual.active.species.name .. "/" .. princess.individual.inactive.species.name
             local droneSpecies = bestDrone.individual.active.species.name .. "/" .. bestDrone.individual.inactive.species.name
-            print("Breeding " .. princessSpecies .. " princess with " .. droneSpecies .. " drone.")
+            print("Breeding " .. princessSpecies .. " princess with " .. droneSpecies .. " drone.|正在将" .. princessSpecies .. " 公主蜂和" .. droneSpecies .. " 雄蜂进行杂交")
             safeTransfer(sideConfig.output, sideConfig.breeder, 1, princessSlot, "output", "breeder") --Send princess to breeding slot
             safeTransfer(sideConfig.output, sideConfig.breeder, 1, bestDroneSlot, "output", "breeder") --Send drone to breeding slot
             for i=1,scanCount do --Move the other drones to the garbage container
