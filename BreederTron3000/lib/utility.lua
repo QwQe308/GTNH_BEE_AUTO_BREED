@@ -694,7 +694,7 @@ function utility.ensureGeneticEquivalence(princessSlot, droneSlot, sideConfig)
     return false
 end
 
-function utility.imprintFromTemplate(beeName, sideConfig, templateGenes)
+function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, acclimatiserConfig)
     print("Imprinting template genes onto " .. beeName .. " bee.")
     local size = transposer.getInventorySize(sideConfig.storage)
 
@@ -724,7 +724,6 @@ function utility.imprintFromTemplate(beeName, sideConfig, templateGenes)
 
     safeTransfer(sideConfig.storage, sideConfig.breeder, 1, basePrincessSlot, "storage", "breeder")
     safeTransfer(sideConfig.storage, sideConfig.breeder, 1, size, "storage", "breeder") -- Last slot in storage is reserved for template bees.
-
     
     local isImprinted = false
     local princess = nil
@@ -1506,6 +1505,7 @@ end
 ---@param sideConfig any
 ---@param acclimatiserConfig any
 function utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig)
+    print("Awaiting Adjust tolerance...")
     -- wait until queen created
     local queenStack = transposer.getStackInSlot(sideConfig.breeder, 1)
     while queenStack ~= nil do
