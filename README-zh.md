@@ -27,8 +27,11 @@ The breeder of all breeders. Breeds from whatever you have in your bee chest up 
 - 世界加速器
 
 ### BreederTron3000 安装指南：
-在 OC 电脑上运行以下命令：
-```wget https://raw.githubusercontent.com/DayuanX/GTNH_OC_SCRIPTS/main/BreederTron3000/setup.lua && setup```
+在 OC 电脑上运行以下命令安装：
+
+```sh
+wget -f https://gh-proxy.org/https://raw.githubusercontent.com/QwQe308/GTNH_BEE_AUTO_BREED/main/BreederTron3000/setup.lua setup.lua && setup
+```
 
 将 4 个箱子、蜂箱紧贴转运器，算上线缆会把转运器的6个面都用完。
 首次启动时，你需要提供所有容器相对于转运器的方向：
@@ -67,7 +70,8 @@ The breeder of all breeders. Breeds from whatever you have in your bee chest up 
 此模式需要在 OC 电脑中安装无线网卡（T2）
 只需：
 1. 用 OC 为硬盘装好系统, 然后执行
-   `wget https://raw.githubusercontent.com/FrostyFire1/GTNH_OC_SCRIPTS/main/BreederTron3000/robotSetup.lua && robotSetup`
+   `wget -f https://gh-proxy.org/https://raw.githubusercontent.com/QwQe308/GTNH_BEE_AUTO_BREED/main/BreederTron3000/robotSetup.lua robotSetup.lua && robotSetup`
+
 2. 组装一个 OC 机器人（必须有键盘、屏幕、无线网卡（推荐 T2）、步骤 1 中的硬盘、一个物品栏升级和一个物品栏控制器升级）。
 3. 将机器人放置在面向你的 蜂箱/蜂箱组 突变方块的位置
 4. 给它所有需要的突变用的方块和一个工具来拆除已经放置的方块 (推荐镐)
@@ -166,6 +170,8 @@ The breeder of all breeders. Breeds from whatever you have in your bee chest up 
 BreederTron3000 breed 能量 --mutatron
 ```
 即可使用诱变机从已有雄蜂开始逐级诱变出能量蜂。
+
+使用小蜂箱并在 `/home/acclimatiserConfig.lua` 中启用 `useAcclimatiser` 后，`BreederTron3000 imprint [蜂种]` 会在补充雄蜂、转换公主蜂和压印育种期间检查蜂后的环境需求。蜂箱环境超出蜂后的温湿度耐受范围时，脚本会使用上述适应性调整器和红石回收装置。压印模式无需添加 `--mutatron`。
 
 ### 可配置项
 1. `lib/config.lua` 中可以调整 `config.forceImprintGenes` 以强制在遇见某些特定基因时直接压印蜂后/公主蜂，目前默认配置了蜜蜂特殊效果中的雷击/流星/辐射，避免蜜蜂摧毁基地。注意不要滥用这个功能，直接压印非常容易把蜜蜂压死，消耗公主蜂的速度非常快。

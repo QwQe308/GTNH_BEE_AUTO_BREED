@@ -217,10 +217,8 @@ function utility.convertPrincess(beeName, sideConfig, droneReq, breeder, acclima
                     end
                 end
             end
-        elseif acclimatiserConfig ~= nil then
-            if acclimatiserConfig.useAcclimatiser and breeder ~= nil then
-                utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig)
-            end
+        elseif breeder and acclimatiserConfig and acclimatiserConfig.useAcclimatiser then
+            utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig)
         end
         os.sleep(1)
     end
@@ -233,9 +231,22 @@ function utility.convertPrincess(beeName, sideConfig, droneReq, breeder, acclima
     end
     safeTransfer(sideConfig.output,sideConfig.storage, 1, 1, "output", "storage")
     print(beeName .. " princess moved to storage.|" .. beeName .. " 公主蜂已移至存储箱。")
+    return true
 end
 
-function utility.populateBee(beeName, sideConfig, targetCount)
+local function waitForBeeCycle(sideConfig, breeder, acclimatiserConfig)
+    local checkTolerance = breeder and acclimatiserConfig and acclimatiserConfig.useAcclimatiser
+    while not cycleIsDone(sideConfig) do
+        if checkTolerance and IsBeeCycleStarted(sideConfig) then
+            utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig)
+            checkTolerance = false
+        else
+            os.sleep(1)
+        end
+    end
+end
+
+function utility.populateBee(beeName, sideConfig, targetCount, breeder, acclimatiserConfig)
     local droneOutput = nil
     print("Populating " .. beeName .. " bee.|正在繁殖 " .. beeName .. " 的雄蜂，保证种群不会断代.")
     local princessSlot, droneSlot = utility.findPairString(beeName, beeName, sideConfig)
@@ -255,9 +266,7 @@ function utility.populateBee(beeName, sideConfig, targetCount)
     safeTransfer(sideConfig.storage, sideConfig.breeder, 1, droneSlot, "storage", "breeder")
     local item = nil
     while(item == nil or item.size < targetCount) do
-        while(not cycleIsDone(sideConfig)) do
-            os.sleep(1)
-        end
+        waitForBeeCycle(sideConfig, breeder, acclimatiserConfig)
         if droneOutput == nil then
             for i=3,9 do
                 local candidate = transposer.getStackInSlot(sideConfig.breeder,i)
@@ -583,19 +592,12 @@ function utility.breedByMutatron(beeName, breedData, sideConfig, breeder, acclim
     local scanCount = 0
 
     while(not isPure) or (not isGeneticallyPerfect) do
-        if IsBeeCycleStarted(sideConfig) and acclimatiserConfig.useAcclimatiser then
-            utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig)
-        end
-        while(not cycleIsDone(sideConfig)) do
-            os.sleep(1)
-        end
+        waitForBeeCycle(sideConfig, breeder, acclimatiserConfig)
         print("Scanning bees...|扫描蜜蜂中")
         scanCount = utility.dumpBreeder(sideConfig, true)
         if scanCount == 0 then
             print("HEY! YOU TOOK OUT THE BEE! PUT A PRINCESS + DRONE IN THE BREEDER!")
-            while(not cycleIsDone(sideConfig)) do
-                os.sleep(1)
-            end
+            waitForBeeCycle(sideConfig, breeder, acclimatiserConfig)
             print("Continuing...")
             goto continueMutatron
         end
@@ -694,7 +696,7 @@ function utility.ensureGeneticEquivalence(princessSlot, droneSlot, sideConfig)
     return false
 end
 
-function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, acclimatiserConfig)
+function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, breeder, acclimatiserConfig)
     print("Imprinting template genes onto " .. beeName .. " bee.")
     local size = transposer.getInventorySize(sideConfig.storage)
 
@@ -705,7 +707,7 @@ function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, acclima
     end
 
     local basePrincessSlot, baseDroneSlot = utility.findPairString(beeName, beeName, sideConfig)
-    if basePrincessSlot == nil or baseDroneSlot == nil then
+    if basePrincessSlot == -1 or baseDroneSlot == -1 then
         print("This species doesn't have both drones and a princess in your storage container! Aborting.")
         return false
     end
@@ -746,15 +748,11 @@ function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, acclima
         bestDronePureness = 0
         bestDroneSlot = nil
         scanCount = 0
-        while(not cycleIsDone(sideConfig)) do
-            os.sleep(1)
-        end
+        waitForBeeCycle(sideConfig, breeder, acclimatiserConfig)
         scanCount = utility.dumpBreeder(sideConfig, true)
         if scanCount == 0 then
             print("HEY! YOU TOOK OUT THE BEE! PUT A PRINCESS + DRONE IN THE BREEDER!")
-            while(not cycleIsDone(sideConfig)) do
-                os.sleep(1)
-            end
+            waitForBeeCycle(sideConfig, breeder, acclimatiserConfig)
             print("Continuing...")
             goto continue
         end
@@ -1500,32 +1498,32 @@ function utility.getQueenHumidityAndTemperatureRange(queen)
     return humidityRange, temperatureRange
 end
 
+local function waitForAcclimatiserOutput(sideConfig, timeout)
+    local elapsedSeconds = 0
+    while transposer.getStackInSlot(sideConfig.output, 1) == nil do
+        if elapsedSeconds >= timeout then
+            print("Timeout while waiting for acclimatiser, break it.")
+            component.redstone.setOutput(sideConfig.acclimatiserBreaker, 15)
+            os.sleep(config.blockBreakerRedstoneInterval)
+            component.redstone.setOutput(sideConfig.acclimatiserBreaker, 0)
+            while transposer.getStackInSlot(sideConfig.output, 1) == nil do
+                os.sleep(1)
+            end
+            return
+        end
+        os.sleep(1)
+        elapsedSeconds = elapsedSeconds + 1
+    end
+end
+
 --- Adjust the tolerance of the queen bee if needed. 
 ---@param breeder any
 ---@param sideConfig any
 ---@param acclimatiserConfig any
 function utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig)
-    print("Awaiting Adjust tolerance...")
-    -- wait until queen created
-    local queenStack = transposer.getStackInSlot(sideConfig.breeder, 1)
-    while queenStack ~= nil do
-        local name, type = utility.getItemName(queenStack)
-        if type == "Queen" then
-            break
-        end
-        os.sleep(1)
-    end
-
-    -- queenStack may be nil if the breeder's work is done
-
-    -- no need to adjust tolerance if the breeder can breed
-    if breeder.canBreed() or transposer.getStackInSlot(sideConfig.breeder, 1) == nil then
+    if not IsBeeCycleStarted(sideConfig) or breeder.canBreed() then
         return
     end
-
-    -- from here, queenStack must not be nil
-    -- and we may have to adjust tolerance
-    assert(queenStack ~= nil, "queenStack must not be nil")
     print("Cannot breed. Adjusting tolerance...")
 
     print(string.format("Breaking apiary to get the queen."))
@@ -1557,9 +1555,6 @@ function utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig
     local temperatureOK = false
     local humidityOK = false
     local humidityRange, temperatureRange = nil, nil
-    local elaspedSeconds = 0
-    local acclimatiserTimeout = acclimatiserConfig.timeout
-    local sideAcclimatiserBreaker = sideConfig.acclimatiserBreaker
 
     while not (temperatureOK and humidityOK) do
         -- temperature
@@ -1574,18 +1569,7 @@ function utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig
         if temperatureRange.max < acclimatiserConfig.temperature or acclimatiserConfig.temperature < temperatureRange.min then
             print("adjusting temperature tolerance.")
             safeTransfer(sideConfig.scanner, sideConfig.scanner, 64, config.slot.scanner.ToBeAcc, "scanner", "T+-Acc", config.slot.scanner.TempAcc)
-            elaspedSeconds = 0
-            while (transposer.getStackInSlot(sideConfig.output, 1) == nil and elaspedSeconds < acclimatiserTimeout) do
-                os.sleep(1)
-                elaspedSeconds = elaspedSeconds + 1
-            end
-            if elaspedSeconds >= acclimatiserTimeout then
-                print("Timeout while waiting for acclimatiser, break it.")
-                component.redstone.setOutput(sideAcclimatiserBreaker, 15)
-                os.sleep(config.blockBreakerRedstoneInterval)
-                component.redstone.setOutput(sideAcclimatiserBreaker, 0)
-                os.sleep(config.blockBreakerRedstoneInterval)
-            end
+            waitForAcclimatiserOutput(sideConfig, acclimatiserConfig.timeout)
             safeTransfer(sideConfig.output, sideConfig.scanner, 64, 1, "output", "ToBeAcc", config.slot.scanner.ToBeAcc)
         else
             temperatureOK = true
@@ -1602,18 +1586,7 @@ function utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig
         if humidityRange.max < acclimatiserConfig.humidity or acclimatiserConfig.humidity < humidityRange.min then
             print("adjusting humidity tolerance.")
             safeTransfer(sideConfig.scanner, sideConfig.scanner, 64, config.slot.scanner.ToBeAcc, "scanner", "H+-Acc", config.slot.scanner.HumAcc)
-            elaspedSeconds = 0
-            while (transposer.getStackInSlot(sideConfig.output, 1) == nil) and elaspedSeconds < acclimatiserTimeout do
-                os.sleep(1)
-                elaspedSeconds = elaspedSeconds + 1
-            end
-            if elaspedSeconds >= acclimatiserTimeout then
-                print("Timeout while waiting for acclimatiser, break it.")
-                component.redstone.setOutput(sideAcclimatiserBreaker, 15)
-                os.sleep(config.blockBreakerRedstoneInterval)
-                component.redstone.setOutput(sideAcclimatiserBreaker, 0)
-                os.sleep(config.blockBreakerRedstoneInterval)
-            end
+            waitForAcclimatiserOutput(sideConfig, acclimatiserConfig.timeout)
             safeTransfer(sideConfig.output, sideConfig.scanner, 64, 1, "output", "ToBeAcc", config.slot.scanner.ToBeAcc)
         else
             humidityOK = true

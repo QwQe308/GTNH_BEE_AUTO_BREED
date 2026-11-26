@@ -1,5 +1,6 @@
 local shell = require("shell")
 local filesystem = require("filesystem")
+local args = shell.parse(...)
 local scripts = {"lib/config.lua", "lib/utility.lua", "BreederTron3000.lua"}
 
 local paths = {"lib"}
@@ -9,7 +10,11 @@ local function exists(filename)
 end
 
 local repo = "https://gh-proxy.org/https://raw.githubusercontent.com/QwQe308/GTNH_BEE_AUTO_BREED/";
-local branch = "master/BreederTron3000"
+local branch = args[1] or "main"
+if #args > 1 or not branch:match("^[%w_][%w._-]*$") then
+    io.stderr:write("Usage: setup [branch] (for example: setup test)\n")
+    return 1
+end
 
 for i = 1, #paths do
     if not filesystem.exists(shell.getWorkingDirectory() .. "/" .. paths[i]) then
@@ -22,7 +27,7 @@ for i = 1, #scripts do
         filesystem.remove(shell.getWorkingDirectory() .. "/" .. scripts[i]);
     end
 
-    shell.execute(string.format("wget %s%s/%s %s", repo, branch, scripts[i], scripts[i]));
+    shell.execute(string.format("wget %s%s/BreederTron3000/%s %s", repo, branch, scripts[i], scripts[i]));
 end
 
 shell.execute("reboot");

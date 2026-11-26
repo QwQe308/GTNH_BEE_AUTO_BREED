@@ -36,7 +36,7 @@ if next(component.list("modem")) ~= nil then
 end
 local robotMode = false
 local sideConfig = util.getOrCreateSideConfig()
-local acclimatiserConfig = util.getOrCreateAcclimatiserConfig()
+local acclimatiserConfig
 
 if (next(component.list("for_alveary_0")) ~= nil) then
     print("Alveary found!|系统已找到蜂房！")
@@ -44,6 +44,7 @@ if (next(component.list("for_alveary_0")) ~= nil) then
 elseif (next(component.list("tile_for_apiculture_0_name")) ~= nil) then
     print("Apiary found!|系统已找到蜂箱！")
     breeder = component.tile_for_apiculture_0_name
+    acclimatiserConfig = util.getOrCreateAcclimatiserConfig()
 else
     print("Can't find breeder block! Terminating.|找不到可用的蜂箱（或蜂箱组）！终止程序。")
     os.exit()
@@ -102,7 +103,7 @@ if programMode:lower() == "breed" or programMode:lower() == "imprint" then
     for name,data in pairs(beeCount) do
         if data["Princess"] ~= nil and data["Drone"] ~= nil then
             if data["Drone"] < 16 then
-                util.populateBee(name, sideConfig, 16)
+                util.populateBee(name, sideConfig, 16, breeder, acclimatiserConfig)
             end
         end
     end
@@ -147,16 +148,16 @@ if programMode:lower() == "breed" then
                     ::retryMutation::
                     if beeCount[parent1].Princess then
                         if beeCount[parent1].Drone < 32 then
-                            util.populateBee(parent1, sideConfig, 16)
+                            util.populateBee(parent1, sideConfig, 16, breeder, acclimatiserConfig)
                         end
                     elseif beeCount[parent2].Princess then
                         if beeCount[parent2].Drone < 32 then
-                            util.populateBee(parent2, sideConfig, 16)
+                            util.populateBee(parent2, sideConfig, 16, breeder, acclimatiserConfig)
                         end
                     else
                             util.convertPrincess(parent1, sideConfig, nil, breeder, acclimatiserConfig)
                             if beeCount[parent1].Drone < 32 then
-                                util.populateBee(parent1, sideConfig, 16)
+                                util.populateBee(parent1, sideConfig, 16, breeder, acclimatiserConfig)
                             end
                     end
                     if flags["mutatron"] == true then
@@ -182,10 +183,10 @@ if programMode:lower() == "breed" then
                             print("YOU RAN OUT OF TEMPLATE DRONES! PLEASE PROVIDE MORE!|模板雄蜂用完了！请提供更多！")
                             os.sleep(5)
                         end
-                        util.populateBee(beeName, sideConfig, 8)
-                        util.imprintFromTemplate(beeName, sideConfig)
+                        util.populateBee(beeName, sideConfig, 8, breeder, acclimatiserConfig)
+                        util.imprintFromTemplate(beeName, sideConfig, nil, breeder, acclimatiserConfig)
                     end
-                    util.populateBee(beeName, sideConfig, 32)
+                    util.populateBee(beeName, sideConfig, 32, breeder, acclimatiserConfig)
                     breedingChain[beeName] = nil
                     bredBee = true
                     print("Updating bee list...|更新蜜蜂列表...")
@@ -207,15 +208,21 @@ elseif programMode:lower() == "imprint" then
     end
     local templateSpecies,_ = util.getItemName(templateDrone)
     if targetBee ~= nil then
-        if beeCount[targetBee].Princess == nil then
-            util.convertPrincess(targetBee, sideConfig)
-        else
-            if beeCount[targetBee].Drone < 8 then
-                util.populateBee(targetBee, sideConfig, 8)
+        local targetCount = beeCount[targetBee]
+        if targetCount == nil or targetCount.Drone == nil then
+            print("No drones for " .. targetBee .. "! Aborting imprint.|没有 " .. targetBee .. " 种群的雄蜂，无法压印。")
+            return
+        end
+        if targetCount.Princess == nil then
+            if not util.convertPrincess(targetBee, sideConfig, nil, breeder, acclimatiserConfig) then
+                return
             end
-            if (util.imprintFromTemplate(targetBee, sideConfig, templateDrone.individual.active) == true) then
-                util.populateBee(targetBee, sideConfig, 32)
-            end
+            util.populateBee(targetBee, sideConfig, 8, breeder, acclimatiserConfig)
+        elseif targetCount.Drone < 8 then
+            util.populateBee(targetBee, sideConfig, 8, breeder, acclimatiserConfig)
+        end
+        if util.imprintFromTemplate(targetBee, sideConfig, templateDrone.individual.active, breeder, acclimatiserConfig) then
+            util.populateBee(targetBee, sideConfig, 32, breeder, acclimatiserConfig)
         end
     else
         for name,count in pairs(beeCount) do
@@ -224,10 +231,10 @@ elseif programMode:lower() == "imprint" then
             end
             if count.Princess ~= nil and count.Drone ~= nil then
                 if count.Drone < 8 then
-                    util.populateBee(name, sideConfig, 8)
+                    util.populateBee(name, sideConfig, 8, breeder, acclimatiserConfig)
                 end
-                if (util.imprintFromTemplate(name, sideConfig, templateDrone.individual.active) == true) then
-                    util.populateBee(name, sideConfig, 32)
+                if util.imprintFromTemplate(name, sideConfig, templateDrone.individual.active, breeder, acclimatiserConfig) then
+                    util.populateBee(name, sideConfig, 32, breeder, acclimatiserConfig)
                 end
                 beeCount[name] = nil
             end
@@ -244,10 +251,12 @@ elseif programMode:lower() == "imprint" then
             local droneSlot = util.findBeeWithType(name, "Drone", sideConfig)
             local drone = transposer.getStackInSlot(sideConfig.storage, droneSlot)
             if not (util.isGeneticallyEquivalent(drone, templateDrone, templateDrone.individual.active, true)) then
-                util.convertPrincess(name, sideConfig)
-                util.populateBee(name, sideConfig, 8)
-                if (util.imprintFromTemplate(name, sideConfig, templateDrone.individual.active) == true) then
-                    util.populateBee(name, sideConfig, 32)
+                if not util.convertPrincess(name, sideConfig, nil, breeder, acclimatiserConfig) then
+                    goto continue
+                end
+                util.populateBee(name, sideConfig, 8, breeder, acclimatiserConfig)
+                if util.imprintFromTemplate(name, sideConfig, templateDrone.individual.active, breeder, acclimatiserConfig) then
+                    util.populateBee(name, sideConfig, 32, breeder, acclimatiserConfig)
                 end
             else
                 print(string.format("%s bee already has template genes. skipping.", name))
@@ -279,7 +288,7 @@ elseif programMode:lower() == "convert" then
             util.convertPrincess(targetBee, sideConfig, nil, breeder, acclimatiserConfig)
         end
         if beeCount[targetBee].Drone < config.convertDroneReq * 2 then
-            util.populateBee(targetBee, sideConfig, 16)
+            util.populateBee(targetBee, sideConfig, 16, breeder, acclimatiserConfig)
         end
         print("Updating bee count...")
         beeCount = util.listBeesInStorage(sideConfig)
