@@ -13,13 +13,13 @@ if next(component.list("modem")) ~= nil then
 end
 
 function utility.createBreedingChain(beeName, breeder, sideConfig, existingBees)
-    local startingParents = utility.processBee(beeName, breeder, "TARGET BEE!")
+    local startingParents = utility.processBee(beeName, breeder, "目标蜂种")
     if(startingParents == nil) then
-        print("Bee has no parents!")
+        print("找不到该蜂种的亲本！")
         return {}
     end
     if(existingBees[beeName]) then
-        print("You already have the " .. beeName .. " bee!")
+        print("仓库中已有 " .. beeName .. " 蜂！")
         return {}
     end
     local breedingChain = {[beeName] = startingParents}
@@ -30,7 +30,7 @@ function utility.createBreedingChain(beeName, breeder, sideConfig, existingBees)
         for child,parentPair in pairs(queue) do
             local leftName = parentPair.allele1.name
             local rightName = parentPair.allele2.name
-            print("Processing parents of " .. child .. ": " .. leftName .. " and " .. rightName .. "|正在处理杂交的迭代种群 " .. child .. "，其父代种群为: " .. leftName .. " 和 " .. rightName)
+            print("正在处理杂交的迭代种群 " .. child .. "，其父代种群为: " .. leftName .. " 和 " .. rightName)
 
             local leftParents = utility.processBee(leftName, breeder, child)
             local rightParents = utility.processBee(rightName, breeder, child)
@@ -82,17 +82,17 @@ end
 function utility.resolveConflict(beeName, parentPairs, child)
     local choice = nil
 
-    print("Detected conflict! Please choose one of the following parents for the " .. beeName .. " bee (Breeds into " .. child .. " bee): |发现蜜蜂重名，请检查NEI确定是蜜蜂种 " .. beeName .. "是以下哪个路线培育上来的  (关于后续" .. child .. " 子代的突变):")
+    print("发现蜜蜂重名，请检查NEI确定是蜜蜂种 " .. beeName .. "是以下哪个路线培育上来的  (关于后续" .. child .. " 子代的突变):")
     for i,pair in pairs(parentPairs) do
         print(i .. ": " .. pair.allele1.name .. " + " .. pair.allele2.name)
     end
 
     while(choice == nil or choice < 1 or choice > #parentPairs) do
-        print("Please type the number of the correct pair|请选择正确的突变路线方案")
+        print("请选择正确的突变路线方案")
         choice = io.read("*n")
     end
 
-    print("Selected: " .. parentPairs[choice].allele1.name .. " + " .. parentPairs[choice].allele2.name)
+    print("已选择：" .. parentPairs[choice].allele1.name .. " + " .. parentPairs[choice].allele2.name)
     return parentPairs[choice]
 end
 
@@ -104,13 +104,13 @@ function utility.listBeesInStorage(sideConfig)
         local bee = transposer.getStackInSlot(sideConfig.storage, i)
         if bee ~= nil then
             if bee.individual ~= nil and bee.individual.active == nil then
-                print(string.format("Bee in slot %d is unscanned! Sending to scanner.|在第%d个栏位的蜜蜂还没有扫描，正在送去扫描", i , i))
+                print(string.format("在第%d个栏位的蜜蜂还没有扫描，正在送去扫描", i))
                 safeTransfer(sideConfig.storage, sideConfig.scanner, 64, i, "storage", "scanner")
                 while (transposer.getStackInSlot(sideConfig.output, 1) == nil) do
                     os.sleep(1)
                 end
                 bee = transposer.getStackInSlot(sideConfig.output, 1)
-                print("Sending back to storage.|送回存储箱")
+                print("送回存储箱")
                 safeTransfer(sideConfig.output, sideConfig.storage, 64, 1, "output", "storage")
             end
             local species,type = utility.getItemName(bee)
@@ -131,7 +131,7 @@ end
 --Converts a princess to the given bee type
 --Assumes bee is scanned (Only scanned bees expose genes)
 function utility.convertPrincess(beeName, sideConfig, droneReq, breeder, acclimatiserConfig)
-    print("Converting princess to " .. beeName .. "|正在将公主蜂转换为 " .. beeName)
+    print("正在将公主蜂转换为 " .. beeName)
     local droneSlot = nil
     local targetGenes = nil
     local princess = transposer.getStackInSlot(sideConfig.breeder, 1)
@@ -164,19 +164,19 @@ function utility.convertPrincess(beeName, sideConfig, droneReq, breeder, acclima
         end
     end
     if droneSlot == nil then
-        print(string.format("Can't find drone or you don't have the required amount of drones (%d)! Aborting.", droneReq))
+        print(string.format("找不到雄蜂，或雄蜂数量不足（需要 %d 只）。停止转换。", droneReq))
         return
     end
     if targetGenes == nil or targetGenes.active == nil then
-        print("Drone not scanned! Aborting.")
+        print("雄蜂尚未扫描，停止转换。")
         return
     end
     if princess == nil then
-        print("Can't find princess! Aborting.")
+        print("找不到公主蜂，停止转换。")
         return
     end
     --Insert bees into the apiary
-    print("Converting " .. princessName .. " princess to " .. beeName .. "|正在将 " .. princessName .. " 公主蜂转换为 " .. beeName)
+    print("正在将 " .. princessName .. " 公主蜂转换为 " .. beeName)
     --First number is the amount of items transferred, the second is the slot number of the container items are transferred to
     --Move only 1 drone at a time to leave the apiary empty after the cycling is complete (you can't extract from input slots)
     safeTransfer(sideConfig.storage,sideConfig.breeder, 1, droneSlot, "storage", "breeder")
@@ -193,10 +193,10 @@ function utility.convertPrincess(beeName, sideConfig, droneReq, breeder, acclima
                 if item ~= nil then
                     local species,type = utility.getItemName(item)
                     if type == "Drone" and item.size == targetGenes.active.fertility and species == beeName then
-                        print("Scanning princess...|正在扫描公主蜂")
+                        print("正在扫描公主蜂")
                         princessConverted = utility.checkPrincess(sideConfig) --This call will move the princess to sideConfig.output
                         if (not princessConverted) then
-                            print("Princess is not a perfect copy! Continuing.|被转换的公主蜂还不是纯合子，继续压印基因")
+                            print("被转换的公主蜂还不是纯合子，继续压印基因")
                             safeTransfer(sideConfig.output,sideConfig.breeder, 1, 1, "output", "breeder") --Move princess back to input
                             safeTransfer(sideConfig.storage, sideConfig.breeder, 1, droneSlot, "storage", "breeder") --Move drone from storage to breed slot
                         end
@@ -222,7 +222,7 @@ function utility.convertPrincess(beeName, sideConfig, droneReq, breeder, acclima
         end
         os.sleep(1)
     end
-    print("Conversion complete!|完成公主蜂的目标种群转换工作")
+    print("完成公主蜂的目标种群转换工作")
     for i=3,9 do --clean up the drones
         local item = transposer.getStackInSlot(sideConfig.breeder, i)
         if item ~= nil then
@@ -230,7 +230,7 @@ function utility.convertPrincess(beeName, sideConfig, droneReq, breeder, acclima
         end
     end
     safeTransfer(sideConfig.output,sideConfig.storage, 1, 1, "output", "storage")
-    print(beeName .. " princess moved to storage.|" .. beeName .. " 公主蜂已移至存储箱。")
+    print(beeName .. " 公主蜂已移至存储箱。")
     return true
 end
 
@@ -248,19 +248,19 @@ end
 
 function utility.populateBee(beeName, sideConfig, targetCount, breeder, acclimatiserConfig)
     local droneOutput = nil
-    print("Populating " .. beeName .. " bee.|正在繁殖 " .. beeName .. " 的雄蜂，保证种群不会断代.")
+    print("正在繁殖 " .. beeName .. " 的雄蜂，保证种群不会断代.")
     local princessSlot, droneSlot = utility.findPairString(beeName, beeName, sideConfig)
     if(princessSlot == -1 or droneSlot == -1) then
-        print("Couldn't find princess or drone! Aborting.|繁殖失败，无法找到纯合子的公主蜂和雄蜂")
+        print("繁殖失败，无法找到纯合子的公主蜂和雄蜂")
         return
     end
     local princess = transposer.getStackInSlot(sideConfig.storage, princessSlot)
     local genes = princess.individual.active
     if genes.fertility == 1 then
-        print("This bee has 1 fertility! I can't populate this! Aborting.")
+        print("该蜂种的繁殖力为 1，无法补充雄蜂。")
         return
     end
-    print(beeName .. " bees found!|" .. beeName .. " 种群的纯合子蜜蜂对已找到")
+    print(beeName .. " 种群的纯合子蜜蜂对已找到")
     --Because the drones in storage are scanned you can only insert 1. the rest will be taken from output of the following cycles
     safeTransfer(sideConfig.storage, sideConfig.breeder, 1, princessSlot, "storage", "breeder")
     safeTransfer(sideConfig.storage, sideConfig.breeder, 1, droneSlot, "storage", "breeder")
@@ -273,9 +273,9 @@ function utility.populateBee(beeName, sideConfig, targetCount, breeder, acclimat
                 if candidate ~= nil then
                     local _,type = utility.getItemName(candidate)
                     if type == "Drone" then
-                        print("Drones located in slot: " .. i .. "|已定位雄蜂在蜂箱的第" .. i .. "格")
+                        print("已定位雄蜂在蜂箱的第" .. i .. "格")
                         if droneOutput ~= nil then
-                            print("HEY! YOU'RE NOT SUPPOSED TO MAKE MORE THAN 2 DRONE STACKS WHEN POPULATING! TERMINATING PROGRAM.|程序运行繁育过程中，不应该有蜜蜂已经在蜂箱中，程序终止（请先清空蜂箱，并保证存储箱中没有杂合子再启动程序）")
+                            print("程序运行繁育过程中，不应该有蜜蜂已经在蜂箱中，程序终止（请先清空蜂箱，并保证存储箱中没有杂合子再启动程序）")
                             os.exit()
                         end
                         droneOutput = i
@@ -284,7 +284,7 @@ function utility.populateBee(beeName, sideConfig, targetCount, breeder, acclimat
             end
         else
             item = transposer.getStackInSlot(sideConfig.breeder, droneOutput)
-            print("Populating progress: " .. item.size .. "/" .. targetCount .. "|繁殖进度: " .. item.size .. "/" .. targetCount)
+            print("繁殖进度: " .. item.size .. "/" .. targetCount)
             if (item.size < targetCount) then
                 safeTransfer(sideConfig.breeder,sideConfig.breeder, 1, droneOutput, "breeder", "breeder") --Move a single drone back to the breeding slot
                 for i=3,9 do
@@ -299,7 +299,7 @@ function utility.populateBee(beeName, sideConfig, targetCount, breeder, acclimat
             end
         end
     end
-    print("Populating complete! Sending " .. beeName .. " bees to scanner.|繁殖雄蜂完成，正在发送 " .. beeName .. " 种的雄蜂进行扫描.")
+    print("繁殖雄蜂完成，正在发送 " .. beeName .. " 种的雄蜂进行扫描.")
     for i=3,9 do
         local item = transposer.getStackInSlot(sideConfig.breeder,i)
         if item ~= nil then
@@ -317,15 +317,15 @@ function utility.populateBee(beeName, sideConfig, targetCount, breeder, acclimat
     safeTransfer(sideConfig.output,sideConfig.storage,64,1, "output", "storage")
     safeTransfer(sideConfig.output,sideConfig.storage,64,2, "output", "storage")
 
-    print("Scanned! " .. beeName .. " bees sent to storage.|扫描完成， " .. beeName .. " 种群的蜜蜂已被送回存储箱")
+    print("扫描完成， " .. beeName .. " 种群的蜜蜂已被送回存储箱")
 end
 
 
 function utility.breed(beeName, breedData, sideConfig, robotMode)
-    print("Breeding " .. beeName .. " bee.|正在尝试杂交 " .. beeName .. " 的蜜蜂.")
+    print("正在尝试杂交 " .. beeName .. " 的蜜蜂.")
     local basePrincessSlot, baseDroneSlot = utility.findPair(breedData, sideConfig)
     if basePrincessSlot == -1 or baseDroneSlot == -1 then
-        print("Couldn't find the parents of " .. beeName .. " bee! Aborting.")
+        print("找不到 " .. beeName .. " 蜂的亲本，停止育种。")
         return
     end
     local basePrincess = transposer.getStackInSlot(sideConfig.storage, basePrincessSlot) --In case princess needs to be converted
@@ -342,54 +342,58 @@ function utility.breed(beeName, breedData, sideConfig, robotMode)
         end
     end
     if chance ~= breedData.chance then
-        print("Mutation altering frames detected!")
+        print("检测到会改变突变概率的框架。")
     end
     
-    print("Base chance: " .. breedData.chance .. "%|本次杂交突变概率：".. breedData.chance .. "%")
+    print("本次杂交突变概率：".. breedData.chance .. "%")
     if breederSize == 12 then
-        print("Actual chance: " .. chance .. "%. MIGHT PRODUCE OTHER MUTATIONS!|实际突变概率: " .. chance .. "%，有概率产生其它非目标种群的突变")
+        print("实际突变概率: " .. chance .. "%，有概率产生其它非目标种群的突变")
     else
-        print("Actual chance unknown (using alveary). MIGHT PRODUCE OTHER MUTATIONS!")
+        print("使用蜂箱组时无法确定实际突变概率，可能产生其他品种。")
     end
     local requirements = breedData.specialConditions
     local botPlaced = false
     if next(requirements) ~= nil then
-        print("This bee has the following special requirements: |该目标种群的突变有如下特殊要求：")
+        print("该目标种群的突变有如下特殊要求：")
         for _, req in pairs(requirements) do
-            print(req)
             local foundationBlock = req:match("Requires ([a-zA-Z ]+) as a foundation")
+            if foundationBlock and req:match("^Requires [a-zA-Z ]+ as a foundation%.?$") then
+                print("突变条件：蜂箱下方需要放置 " .. foundationBlock .. " 作为基底。")
+            else
+                print("突变条件：" .. req)
+            end
             if robotMode and foundationBlock ~= nil then
-                print("Telling the robot to place: " .. foundationBlock)
+                print("正在让机器人放置：" .. foundationBlock)
                 modem.broadcast(config.robotPort, "place " .. foundationBlock)
                 os.sleep(0.5)
                 local _, _, _, _, _, actionTaken = event.pull("modem_message")
                 if actionTaken  == true then
-                    print("Robot successfuly placed: " .. foundationBlock)
+                    print("机器人已放置：" .. foundationBlock)
                     botPlaced = true
                 else
-                    print("Robot could not place " .. foundationBlock .. ". Please do it yourself.")
+                    print("机器人无法放置 " .. foundationBlock .. "，请手动放置。")
                 end
             end
         end
         if #requirements == 1 and botPlaced then
-            print("The robot dealt with all of the requirements! Proceeding.")
+            print("机器人已处理全部突变条件，继续育种。")
         else
             --询问用户是否满足条件
             if lastRequirements ~= requirements then
-                print("Type \"ok\" when you've made sure the conditions are met or type \"skip\" to skip this breed (You made this bee somewhere else).|请输入ok以代表你已经确认其满足上述条件，或者输入skip跳过本次育种（然后你自己去其它地方完成该育种）")
+                print("请输入ok以代表你已经确认其满足上述条件，或者输入skip跳过本次育种（然后你自己去其它地方完成该育种）")
                 local ans = io.read()
                 while type(ans) ~= "string" or ans == "" do
-                    print("Type \"ok\" when you've made sure the conditions are met or type \"skip\" to skip this breed (You made this bee somewhere else).|请输入ok以代表你已经确认其满足上述条件，或者输入skip跳过本次育种（然后你自己去其它地方完成该育种）")
+                    print("请输入ok以代表你已经确认其满足上述条件，或者输入skip跳过本次育种（然后你自己去其它地方完成该育种）")
                     ans = io.read()
                 end
                 if ans == "skip" then
-                    print("Updating the bee list...")
+                    print("正在更新蜜蜂列表……")
                     utility.listBeesInStorage(sideConfig)
                     goto skip
                 end
                 lastRequirements = requirements
             else
-                print("You have already confirmed the same mutation conditions previously, so we will not ask you to confirm them again.|你上次已经确认过相同的突变条件，不再向你确认")
+                print("你上次已经确认过相同的突变条件，不再向你确认")
             end
         end
     end
@@ -412,21 +416,21 @@ function utility.breed(beeName, breedData, sideConfig, robotMode)
         while(not cycleIsDone(sideConfig)) do
             os.sleep(1)
         end
-        print("Scanning bees...|扫描蜜蜂中")
+        print("扫描蜜蜂中")
         scanCount = utility.dumpBreeder(sideConfig, true)
         if scanCount == 0 then
-            print("HEY! YOU TOOK OUT THE BEE! PUT A PRINCESS + DRONE IN THE BREEDER!")
+            print("蜂箱中的蜜蜂已被取出，请放回一只公主蜂和一只雄蜂。")
             while(not cycleIsDone(sideConfig)) do
                 os.sleep(1)
             end
-            print("Continuing...")
+            print("正在继续育种……")
             goto continue
         end
         while(transposer.getStackInSlot(sideConfig.output, scanCount) == nil) do
             os.sleep(1)
         end
 
-        print("Assessing...|分析中")
+        print("分析中")
         princess = nil
         princessPureness = 0
         princessSlot = nil
@@ -462,11 +466,11 @@ function utility.breed(beeName, breedData, sideConfig, robotMode)
         end
 
         if (princessPureness + bestDronePureness) == 4 then
-            print("Target bee is pure!|目标蜜蜂的种群信息为纯合子")
+            print("目标蜜蜂的种群信息为纯合子")
             isPure = true
             isGeneticallyPerfect = utility.ensureGeneticEquivalence(princessSlot, bestDroneSlot, sideConfig) --Makes sure all genes are equal. will move genetically equivalent bee to storage
             if not isGeneticallyPerfect then
-                print("Target bee is not genetically consistent! continuing|目标蜜蜂的其它等位基因为杂合子，需要继续繁育提纯")
+                print("目标蜜蜂的其它等位基因为杂合子，需要继续繁育提纯")
                 safeTransfer(sideConfig.output, sideConfig.breeder, 1, princessSlot, "output", "breeder") --Send princess to breeding slot
                 safeTransfer(sideConfig.output, sideConfig.breeder, 1, bestDroneSlot, "output", "breeder") --Send drone to breeding slot
                 dumpOutput(sideConfig, scanCount)
@@ -474,33 +478,33 @@ function utility.breed(beeName, breedData, sideConfig, robotMode)
         elseif (princessPureness + bestDronePureness) > 0 then
             if (not messageSent) then
                 messageSent = true
-                print("Target species present!|目标种群已出现")
-                print("IT IS RECOMMENDED THAT YOU TAKE OUT ANY MUTATION ALTERING FRAMES TO REDUCE THE RISK OF UNWANTED MUTATIONS.|我们强烈建议您此时拿出带有突变效果的框架，以防该基因消失")
+                print("目标种群已出现")
+                print("我们强烈建议您此时拿出带有突变效果的框架，以防该基因消失")
                 os.sleep(5)
             end
             local princessSpecies = princess.individual.active.species.name .. "/" .. princess.individual.inactive.species.name
             local droneSpecies = bestDrone.individual.active.species.name .. "/" .. bestDrone.individual.inactive.species.name
-            print("Breeding " .. princessSpecies .. " princess with " .. droneSpecies .. " drone.|正在将" .. princessSpecies .. " 公主蜂和" .. droneSpecies .. " 雄蜂进行杂交")
+            print("正在将" .. princessSpecies .. " 公主蜂和" .. droneSpecies .. " 雄蜂进行杂交")
             safeTransfer(sideConfig.output, sideConfig.breeder, 1, princessSlot, "output", "breeder") --Send princess to breeding slot
             safeTransfer(sideConfig.output, sideConfig.breeder, 1, bestDroneSlot, "output", "breeder") --Send drone to breeding slot
             for i=1,scanCount do --Move the other drones to the garbage container
                 safeTransfer(sideConfig.output, sideConfig.garbage, 64, i, "output", "garbage")
             end
         else
-            print("TARGET SPECIES LOST!|目标种群未找到（杂交失败）")
-            print("Looking for reserve drone...|正在搜索备用的雄蜂")
+            print("目标种群未找到（杂交失败）")
+            print("正在搜索备用的雄蜂")
             bestReserveDrone = nil
             bestReserveScore, bestReserveSlot = getBestBreedReserve(beeName, sideConfig)
             if bestReserveSlot ~= nil then
                 bestReserveDrone = transposer.getStackInSlot(sideConfig.garbage, bestReserveSlot)
             end
             if bestReserveDrone ~= nil then
-                print("Found reserve drone with pureness: " .. bestReserveScore .. "/" .. "2")
+                print("已找到备用雄蜂，蜂种纯度：" .. bestReserveScore .. "/" .. "2")
                 safeTransfer(sideConfig.garbage, sideConfig.breeder, 1, bestReserveSlot, "garbage", "breeder")
                 safeTransfer(sideConfig.output, sideConfig.breeder, 1, princessSlot, "output", "breeder")
                 dumpOutput(sideConfig, scanCount)
             else
-                print("Couldn't find a good reserve drone! converting back to base species.|找不到一个好的备用雄蜂！准备重新从父代种开始杂交。")
+                print("找不到一个好的备用雄蜂！准备重新从父代种开始杂交。")
                 safeTransfer(sideConfig.output,sideConfig.breeder, 1, princessSlot, "output", "breeder") -- Move to breeder for conversion
                 for i=1,scanCount do --Get rid of the useless bees
                     safeTransfer(sideConfig.output, sideConfig.garbage, 64, i, "output", "garbage")
@@ -522,7 +526,7 @@ function utility.breed(beeName, breedData, sideConfig, robotMode)
             safeTransfer(sideConfig.output,sideConfig.garbage, 64, i, "output", "garbage") --Move irrelevant drones to garbage
         end
     end
-    print("Breeding finished. " .. beeName .. " princess and its drones moved to storage.|育种完成。" .. beeName .. " 公主蜂及其雄蜂已移至存储。")
+    print("育种完成。" .. beeName .. " 公主蜂及其雄蜂已移至存储。")
     ::skip::
 end
 
@@ -534,23 +538,23 @@ end
 ---@param acclimatiserConfig table acclimatiserConfig object.
 ---@return boolean success true if breeding succeeded or aborted, false means we need a retry
 function utility.breedByMutatron(beeName, breedData, sideConfig, breeder, acclimatiserConfig)
-    assert(breeder ~= nil, "breeder should not be nil.")
-    print("Breeding " .. beeName .. " bee by Mutatron.")
+    assert(breeder ~= nil, "未检测到蜂箱组件。")
+    print("正在使用诱变机培育 " .. beeName .. " 蜂。")
     local basePrincessSlot, baseDroneSlot = utility.findPair(breedData, sideConfig)
     if basePrincessSlot == -1 or baseDroneSlot == -1 then
-        print("Couldn't find the parents of " .. beeName .. " bee! Aborting.")
+        print("找不到 " .. beeName .. " 蜂的亲本，停止育种。")
         return true
     end
 
     if utility.isBeeSpeciesBlacklistedInMutatron(beeName) then
-        print("This bee is blacklisted in the Mutatron!")
-        print("type \"skip\" to skip this breed (You made this bee somewhere else).")
+        print("该蜂种无法通过诱变机培育。")
+        print("请在其他地方培育该蜂种，再输入 skip 跳过本次育种。")
         local ans = io.read()
         while type(ans) ~= "string" or ans ~= "skip" do
-            print("type \"skip\" to skip this breed (You made this bee somewhere else).")
+            print("请在其他地方培育该蜂种，再输入 skip 跳过本次育种。")
             ans = io.read()
         end
-        print("Updating the bee list...")
+        print("正在更新蜜蜂列表……")
         utility.listBeesInStorage(sideConfig)
 
         return true
@@ -565,7 +569,7 @@ function utility.breedByMutatron(beeName, breedData, sideConfig, breeder, acclim
         os.sleep(1)
     end
     if transposer.getStackInSlot(sideConfig.output, 1).name == "gendustry:Waste" then
-        print("Mutatron failed! Princess and drone killed by mutatron. We may have a retry.")
+        print("诱变失败，公主蜂和雄蜂已死亡，可以重试。")
         safeTransfer(sideConfig.output, sideConfig.garbage, 64, 1, "output", "garbage")
         return false
     end
@@ -574,7 +578,7 @@ function utility.breedByMutatron(beeName, breedData, sideConfig, breeder, acclim
     -- queen in output#1
     local killed = utility.forceImprintIfNeeded(sideConfig.output, 1, sideConfig)
     if killed then
-        print("Queen killed by imprinter! We may have a retry.")
+        print("蜂后在压印时死亡，可以重试。")
         return false
     end
 
@@ -593,19 +597,19 @@ function utility.breedByMutatron(beeName, breedData, sideConfig, breeder, acclim
 
     while(not isPure) or (not isGeneticallyPerfect) do
         waitForBeeCycle(sideConfig, breeder, acclimatiserConfig)
-        print("Scanning bees...|扫描蜜蜂中")
+        print("扫描蜜蜂中")
         scanCount = utility.dumpBreeder(sideConfig, true)
         if scanCount == 0 then
-            print("HEY! YOU TOOK OUT THE BEE! PUT A PRINCESS + DRONE IN THE BREEDER!")
+            print("蜂箱中的蜜蜂已被取出，请放回一只公主蜂和一只雄蜂。")
             waitForBeeCycle(sideConfig, breeder, acclimatiserConfig)
-            print("Continuing...")
+            print("正在继续育种……")
             goto continueMutatron
         end
         while(transposer.getStackInSlot(sideConfig.output, scanCount) == nil) do
             os.sleep(1)
         end
 
-        print("Assessing...|分析中")
+        print("分析中")
         princessPureness = 0
         princessSlot = nil
         bestDronePureness = -1
@@ -636,13 +640,13 @@ function utility.breedByMutatron(beeName, breedData, sideConfig, breeder, acclim
             end
         end
 
-        assert(bestDroneSlot ~= nil, "With mutatron we should not get impure bees, something went wrong")
-        assert(princessSlot ~= nil, "With mutatron we should not get impure bees, something went wrong")
+        assert(bestDroneSlot ~= nil, "诱变结果异常，未找到预期的纯种蜜蜂。")
+        assert(princessSlot ~= nil, "诱变结果异常，未找到预期的纯种蜜蜂。")
 
         -- princess may still have dangerous genes, check it
         killed = utility.forceImprintIfNeeded(sideConfig.output, princessSlot, sideConfig)
         if killed then
-            print("Princess killed by imprinter! We may have a retry.")
+            print("公主蜂在压印时死亡，可以重试。")
             for i=1,scanCount do
                 safeTransfer(sideConfig.output,sideConfig.garbage, 64, i, "output", "garbage") --Move all bees to garbage
             end
@@ -658,17 +662,17 @@ function utility.breedByMutatron(beeName, breedData, sideConfig, breeder, acclim
         end
 
         if (princessPureness + bestDronePureness) == 4 then
-            print("Target bee is pure!|目标蜜蜂的种群信息为纯合子")
+            print("目标蜜蜂的种群信息为纯合子")
             isPure = true
             isGeneticallyPerfect = utility.ensureGeneticEquivalence(princessSlot, bestDroneSlot, sideConfig) --Makes sure all genes are equal. will move genetically equivalent bee to storage
             if not isGeneticallyPerfect then
-                print("Target bee is not genetically consistent! continuing|目标蜜蜂的其它等位基因为杂合子，需要继续繁育提纯")
+                print("目标蜜蜂的其它等位基因为杂合子，需要继续繁育提纯")
                 safeTransfer(sideConfig.output, sideConfig.breeder, 1, princessSlot, "output", "breeder") --Send princess to breeding slot
                 safeTransfer(sideConfig.output, sideConfig.breeder, 1, bestDroneSlot, "output", "breeder") --Send drone to breeding slot
                 dumpOutput(sideConfig, scanCount, bestDroneSlot)
             end
         else
-            assert(false, "With mutatron we should not get impure bees, something went wrong")
+            assert(false, "诱变结果异常，未找到预期的纯种蜜蜂。")
         end
         ::continueMutatron::
     end
@@ -677,7 +681,7 @@ function utility.breedByMutatron(beeName, breedData, sideConfig, breeder, acclim
             safeTransfer(sideConfig.output,sideConfig.garbage, 64, i, "output", "garbage") --Move irrelevant drones to garbage
         end
     end
-    print("Breeding finished. " .. beeName .. " princess and its drones moved to storage.|育种完成。" .. beeName .. " 公主蜂及其雄蜂已移至存储。")
+    print("育种完成。" .. beeName .. " 公主蜂及其雄蜂已移至存储。")
 
     return true
 end
@@ -688,7 +692,7 @@ function utility.ensureGeneticEquivalence(princessSlot, droneSlot, sideConfig)
     local targetGenes = princess.individual.active
     local isEquivalent = utility.isGeneticallyEquivalent(princess, drone, princess.individual.active, false)
     if isEquivalent then
-        print("Target bee is genetically consistent!|目标蜜蜂的所有基因都是纯合子了！")
+        print("目标蜜蜂的所有基因都是纯合子了！")
         safeTransfer(sideConfig.output, sideConfig.storage, 1, princessSlot, "output", "storage")
         safeTransfer(sideConfig.output, sideConfig.storage, 64, droneSlot, "output", "storage")
         return true
@@ -697,18 +701,18 @@ function utility.ensureGeneticEquivalence(princessSlot, droneSlot, sideConfig)
 end
 
 function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, breeder, acclimatiserConfig)
-    print("Imprinting template genes onto " .. beeName .. " bee.")
+    print("正在将模板基因压印到 " .. beeName .. " 蜂。")
     local size = transposer.getInventorySize(sideConfig.storage)
 
     local templateDrone = transposer.getStackInSlot(sideConfig.storage, size)
     if templateDrone == nil then
-        print("You don't have a template drone (It goes in the last slot of your storage container)! Aborting.")
+        print("找不到模板雄蜂。请将模板雄蜂放入存储箱最后一格。")
         return false
     end
 
     local basePrincessSlot, baseDroneSlot = utility.findPairString(beeName, beeName, sideConfig)
     if basePrincessSlot == -1 or baseDroneSlot == -1 then
-        print("This species doesn't have both drones and a princess in your storage container! Aborting.")
+        print("存储箱缺少该蜂种的公主蜂或雄蜂，停止压印。")
         return false
     end
 
@@ -719,7 +723,7 @@ function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, breeder
     end
 
     if utility.isGeneticallyEquivalent(basePrincess, templateDrone, templateGenes, true) then
-        print("This bee already has template genes! Aborting.")
+        print("该蜂种已有模板基因，跳过压印。")
         return false
     end
 
@@ -751,16 +755,16 @@ function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, breeder
         waitForBeeCycle(sideConfig, breeder, acclimatiserConfig)
         scanCount = utility.dumpBreeder(sideConfig, true)
         if scanCount == 0 then
-            print("HEY! YOU TOOK OUT THE BEE! PUT A PRINCESS + DRONE IN THE BREEDER!")
+            print("蜂箱中的蜜蜂已被取出，请放回一只公主蜂和一只雄蜂。")
             waitForBeeCycle(sideConfig, breeder, acclimatiserConfig)
-            print("Continuing...")
+            print("正在继续育种……")
             goto continue
         end
-        print("Scanning...")
+        print("正在扫描……")
         while transposer.getStackInSlot(sideConfig.output, scanCount) == nil do --Wait for scan finish
             os.sleep(1)
         end
-        print("Grading...")
+        print("正在评估基因……")
         for i=1,scanCount do
             local bee = transposer.getStackInSlot(sideConfig.output, i) --scanCount guarantees there are bees in these slots
             local _,type = utility.getItemName(bee)
@@ -781,27 +785,27 @@ function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, breeder
         end
 
         local geneticSum = princessScore + bestDroneScore
-        print("Genetic score: " .. geneticSum .. "/" .. config.targetSum*2)
+        print("基因评分：" .. geneticSum .. "/" .. config.targetSum*2)
         if (tostring(geneticSum) == tostring(config.targetSum*2)) then --Avoids floating point arithmetic errors
-            print("Genetic imprint succeeded!")
-            print("Dumping original drones...")
+            print("基因压印成功。")
+            print("正在将原有雄蜂移入杂物箱……")
             utility.dumpDrones(beeName, sideConfig)
             safeTransfer(sideConfig.output, sideConfig.storage, 1, princessSlot, "output", "storage")
             safeTransfer(sideConfig.output, sideConfig.storage, 64, bestDroneSlot, "output", "storage")
-            print("Imprinted bee moved to storage.|基因压印蜜蜂已移至存储箱。")
+            print("基因压印蜜蜂已移至存储箱。")
             dumpOutput(sideConfig, scanCount)
             return true
         end
 
         if (princessPureness + bestDronePureness) == 4 then
-            print("PRINCESS AND DRONE ARE PURELY ORIGINAL SPECIES!")
+            print("公主蜂和雄蜂均为原品种的纯合子。")
             if utility.hasTargetGenes(princess, bestDrone, templateGenes) then
-                print("Target gene pool reachable. Continuing.")
+                print("现有亲本可繁育出目标基因，继续繁育。")
                 continueImprinting(sideConfig, princessSlot, bestDroneSlot, scanCount)
             else
-                print("Target gene pool unreachable. substituting drone for template drone.")
+                print("现有亲本无法繁育出目标基因，改用模板雄蜂。")
                 while (transposer.getStackInSlot(sideConfig.storage, size) == nil) do
-                    print("YOU RAN OUT OF TEMPLATE DRONES! PLEASE PROVIDE MORE!")
+                    print("模板雄蜂已用完，请补充。")
                     os.sleep(5)
                 end
                 safeTransfer(sideConfig.output, sideConfig.breeder, 1, princessSlot, "output", "breeder")
@@ -812,8 +816,8 @@ function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, breeder
             end
 
         elseif (princessPureness + bestDronePureness) == 0 then
-            print("ORIGINAL SPECIES LOST!")
-            print("Looking for reserve drone...")
+            print("后代已失去原品种。")
+            print("正在查找备用雄蜂……")
             local bestReserveDrone = nil
             local bestReserveScore = -1
             local bestReserveSlot = nil
@@ -822,21 +826,21 @@ function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, breeder
                 bestReserveDrone = transposer.getStackInSlot(sideConfig.garbage, bestReserveSlot)
             end
             if bestReserveDrone ~= nil then
-                print("Found reserve drone with genetic score " .. bestReserveScore .. "/" .. config.targetSum)
+                print("已找到备用雄蜂，基因评分：" .. bestReserveScore .. "/" .. config.targetSum)
                 safeTransfer(sideConfig.garbage, sideConfig.breeder, 1, bestReserveSlot, "garbage", "breeder")
                 safeTransfer(sideConfig.output, sideConfig.breeder, 1, princessSlot, "output", "breeder")
                 dumpOutput(sideConfig, scanCount)
             else
-                print("Couldn't find reserve drone! Substituting base drone")
+                print("找不到备用雄蜂，改用原品种的雄蜂。")
                 safeTransfer(sideConfig.output, sideConfig.breeder, 1, princessSlot, "output", "breeder")
                 if (safeTransfer(sideConfig.storage, sideConfig.breeder, 1, baseDroneSlot, "storage", "breeder") == 0) then
-                    print("OUT OF BASE DRONES! TERMINATING.")
+                    print("原品种的雄蜂已用完，程序终止。")
                     os.exit()
                 end
                 dumpOutput(sideConfig, scanCount)
             end
         elseif (princessPureness + bestDronePureness) == 1 then
-            print("BEE AT RISK OF LOSING ORIGINAL SPECIES!")
+            print("后代可能失去原品种。")
             continueImprinting(sideConfig, princessSlot, bestDroneSlot, scanCount)
         else
             continueImprinting(sideConfig, princessSlot, bestDroneSlot, scanCount)
@@ -878,7 +882,7 @@ function getBestReserve(beeName, sideConfig, targetGenes)
         ::continue::
     end
     if bestReserveSlot ~= nil and transposer.getStackInSlot(sideConfig.garbage, bestReserveSlot) == nil then
-        print("BEST RESERVE DRONE DISAPPEARED! TRYING AGAIN...")
+        print("选中的备用雄蜂已被移走，正在重新查找……")
         return getBestReserve(beeName, sideConfig, targetGenes, config.geneWeights)
     end
     return table.unpack({bestReserveScore, bestReserveSlot})
@@ -918,7 +922,7 @@ function getBestBreedReserve(beeName, sideConfig)
         ::continue::
     end
     if bestReserveSlot ~= nil and transposer.getStackInSlot(sideConfig.garbage, bestReserveSlot) == nil then
-        print("BEST RESERVE DRONE DISAPPEARED! TRYING AGAIN...")
+        print("选中的备用雄蜂已被移走，正在重新查找……")
         return getBestReserve(beeName, sideConfig, targetGenes, config.geneWeights)
     end
     return table.unpack({bestReserveScore, bestReserveSlot})
@@ -1225,24 +1229,34 @@ function utility.areGenesEqual(geneTable)
 end
 
 
+local containerNames = {
+    ["storage"] = "存储箱",
+    ["scanner"] = "扫描仪输入箱",
+    ["output"] = "输出箱",
+    ["garbage"] = "杂物箱",
+    ["apiaryBreaker"] = "蜂箱拆除装置",
+    ["acclimatiserBreaker"] = "调整器拆除装置",
+}
+
 function utility.getOrCreateSideConfig()
     if filesystem.exists("/home/sideConfig.lua") then
         local sideConfig = require("sideConfig")
         return sideConfig
     end
+    local directionNames = {"下", "上", "北", "南", "西", "东"}
     local directions = {"down","up","north","south","west","east"}
     local remainingDirections = {"down","up","north","south","west","east"}
     local configOrder = {"storage","scanner","output","garbage"}
     local newConfig = {}
 
-    print("It looks like this might be your first time running this program. Let's set up your containers!")
-    print("All directions are relative to the transposer.")
+    print("首次运行，请配置容器方向。")
+    print("以下方向均以转运器为基准。")
 
     for _,container in pairs(configOrder) do
-        print(string.format("Which side is the: %s? Select one of the following:", container))
+        print(string.format("请输入%s所在方向的编号：", containerNames[container]))
         for i,direction in pairs(directions) do
             if indexInTable(remainingDirections, direction) ~= 0 then
-                print(string.format("%d. %s", i, direction))
+                print(string.format("%d. %s", i, directionNames[i]))
             end
         end
         local answeredCorrectly = false
@@ -1264,20 +1278,20 @@ function utility.getOrCreateSideConfig()
                 end
             end
             if not answeredCorrectly then
-                print("I can't process this answer! Try again.")
+                print("无法识别输入，请重试。")
             end
         end
     end
 
     remainingDirections = {"down","up","north","south","west","east"}
     configOrder = {"apiaryBreaker","acclimatiserBreaker"}
-    print("Let's set up the redstone I/O! If you don't need it, configure it randomly.")
-    print("All directions are relative to the redstone I/O.")
+    print("请配置红石 I/O 的输出方向。无需使用红石控制时可任选方向。")
+    print("以下方向均以红石 I/O 为基准。")
     for _,container in pairs(configOrder) do
-        print(string.format("Which side is the: %s? Select one of the following:", container))
+        print(string.format("请输入%s所在方向的编号：", containerNames[container]))
         for i,direction in pairs(directions) do
             if indexInTable(remainingDirections, direction) ~= 0 then
-                print(string.format("%d. %s", i, direction))
+                print(string.format("%d. %s", i, directionNames[i]))
             end
         end
         local answeredCorrectly = false
@@ -1299,12 +1313,12 @@ function utility.getOrCreateSideConfig()
                 end
             end
             if not answeredCorrectly then
-                print("I can't process this answer! Try again.")
+                print("无法识别输入，请重试。")
             end
         end
     end
 
-    print("Creating sideConfig.lua...")
+    print("正在创建 sideConfig.lua……")
     local file = filesystem.open("/home/sideConfig.lua", "w")
     file:write("local sideConfig = {\n")
     for container,side in pairs(newConfig) do
@@ -1313,7 +1327,7 @@ function utility.getOrCreateSideConfig()
     file:write("}\n")
     file:write("return sideConfig")
     file:close()
-    print("Done! Setup Complete!")
+    print("配置完成。")
     return newConfig
 end
 
@@ -1324,14 +1338,14 @@ function utility.getOrCreateAcclimatiserConfig()
     end
     local newConfig = {}
 
-    print("It looks like this might be your first time running this program. Let's set up your acclimatiser!")
-    print("Do you want to use acclimatiser to adjust humidity/temperature? (y/n)")
+    print("首次运行，请配置适应性调整器。")
+    print("是否使用适应性调整器调整湿度和温度耐受性？输入 y 确认或 n 取消。")
     local getUseAcclimatiser = function ()
         local answer = nil
         while answer == nil do
             answer = io.read("*l")
             if string.lower(answer) ~= "y" and string.lower(answer) ~= "n" then
-                print("Invalid input. Please enter y or n.")
+                print("输入无效，请输入 y 或 n。")
                 answer = nil
             end
         end
@@ -1340,18 +1354,18 @@ function utility.getOrCreateAcclimatiserConfig()
 
     newConfig.useAcclimatiser = getUseAcclimatiser()
 
-    print("Check your apiary to get humidity/temperature info, and enter the number below.")
+    print("请查看蜂箱所处环境的湿度和温度，再输入对应的数字。")
     -- humidity
     local function getHumidity()
         local answer = nil
         while answer == nil do
-            print("Please enter the apiary humidity:")
-            print("arid: -1")
-            print("normal: 0")
-            print("damp: 1")
+            print("请选择蜂箱环境湿度：")
+            print("干燥：-1")
+            print("普通：0")
+            print("潮湿：1")
             answer = io.read("*n")
             if answer < -1 or answer > 1 then
-                print("Invalid input.")
+                print("输入无效。")
                 answer = nil
             end
         end
@@ -1361,17 +1375,17 @@ function utility.getOrCreateAcclimatiserConfig()
     local function getTemperature()
         local answer = nil
         while answer == nil do
-            print("Please enter the apiary temperature:")
-            print("icy: -2")
-            print("cold: -1")
-            print("none: 0")
-            print("normal: 0")
-            print("warm: 1")
-            print("hot: 2")
-            print("hellish: 3")
+            print("请选择蜂箱环境温度：")
+            print("冰冷：-2")
+            print("寒冷：-1")
+            print("无：0")
+            print("普通：0")
+            print("温暖：1")
+            print("炎热：2")
+            print("地狱：3")
             answer = io.read("*n")
             if answer < -2 or answer > 3 then
-                print("Invalid input.")
+                print("输入无效。")
                 answer = nil
             end
         end
@@ -1381,11 +1395,11 @@ function utility.getOrCreateAcclimatiserConfig()
     local function getTimeout()
         local answer = nil
         while answer == nil do
-            print("Please enter the acclimatiser timeout in seconds:")
-            print("(Acclimatiser will be break to retrieve Queen bee back when timed out):")
+            print("请输入适应性调整器的超时秒数：")
+            print("超时后将拆除调整器以取回蜂后。")
             answer = io.read("*n")
             if answer < 0 then
-                print("Invalid input.")
+                print("输入无效。")
                 answer = nil
             end
         end
@@ -1396,7 +1410,7 @@ function utility.getOrCreateAcclimatiserConfig()
     newConfig.temperature = getTemperature()
     newConfig.timeout = getTimeout()
 
-    print("Creating acclimatiserConfig.lua...")
+    print("正在创建 acclimatiserConfig.lua……")
     local file = filesystem.open("/home/acclimatiserConfig.lua", "w")
     file:write("local acclimatiserConfig = {\n")
     file:write(string.format("[\"%s\"] = %s, \n", "useAcclimatiser", newConfig.useAcclimatiser))
@@ -1406,7 +1420,7 @@ function utility.getOrCreateAcclimatiserConfig()
     file:write("}\n")
     file:write("return acclimatiserConfig")
     file:close()
-    print("Done! Setup Complete!")
+    print("配置完成。")
     return newConfig
 end
 function utility.isBeeSpeciesBlacklistedInMutatron(beeName)
@@ -1478,8 +1492,6 @@ function utility.getQueenHumidityAndTemperatureRange(queen)
         return humidityMap[humidity:upper()] or 0
     end
 
-    -- print(string.format("humidity: %s, temperature: %s", queen.active.species.humidity, queen.active.species.temperature))
-
     local humidityUp, humidityDown = parseTolerance(queen.active.humidityTolerance)
     local temperatureUp, temperatureDown = parseTolerance(queen.active.temperatureTolerance)
     local baseHumidity = parseHumidity(queen.active.species.humidity)
@@ -1502,7 +1514,7 @@ local function waitForAcclimatiserOutput(sideConfig, timeout)
     local elapsedSeconds = 0
     while transposer.getStackInSlot(sideConfig.output, 1) == nil do
         if elapsedSeconds >= timeout then
-            print("Timeout while waiting for acclimatiser, break it.")
+            print("等待适应性调整器超时，正在触发拆除装置以取回蜂后。")
             component.redstone.setOutput(sideConfig.acclimatiserBreaker, 15)
             os.sleep(config.blockBreakerRedstoneInterval)
             component.redstone.setOutput(sideConfig.acclimatiserBreaker, 0)
@@ -1524,9 +1536,9 @@ function utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig
     if not IsBeeCycleStarted(sideConfig) or breeder.canBreed() then
         return
     end
-    print("Cannot breed. Adjusting tolerance...")
+    print("蜂后无法繁育，正在检查温湿度耐受性……")
 
-    print(string.format("Breaking apiary to get the queen."))
+    print("正在触发拆除装置，从蜂箱取回蜂后。")
     component.redstone.setOutput(sideConfig.apiaryBreaker, 15)
     os.sleep(config.blockBreakerRedstoneInterval)
     component.redstone.setOutput(sideConfig.apiaryBreaker, 0)
@@ -1543,7 +1555,7 @@ function utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig
 
     local bee = transposer.getStackInSlot(sideConfig.scanner, config.slot.scanner.ToBeAcc)
     if bee.individual ~= nil and bee.individual.active == nil then
-        print(string.format("Queen is unscanned! Sending to scanner."))
+        print("蜂后尚未扫描，正在送往扫描仪。")
         safeTransfer(sideConfig.scanner, sideConfig.scanner, 64, config.slot.scanner.ToBeAcc, "output", "scanner", 1)
         while (transposer.getStackInSlot(sideConfig.output, 1) == nil) do
             os.sleep(1)
@@ -1564,10 +1576,10 @@ function utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig
 
         bee = transposer.getStackInSlot(sideConfig.scanner, config.slot.scanner.ToBeAcc)
         humidityRange, temperatureRange = utility.getQueenHumidityAndTemperatureRange(bee)
-        assert(humidityRange ~= nil, "humidityRange must not be nil")
-        assert(temperatureRange ~= nil, "temperatureRange must not be nil")
+        assert(humidityRange ~= nil, "无法读取蜂后的湿度耐受范围。")
+        assert(temperatureRange ~= nil, "无法读取蜂后的温度耐受范围。")
         if temperatureRange.max < acclimatiserConfig.temperature or acclimatiserConfig.temperature < temperatureRange.min then
-            print("adjusting temperature tolerance.")
+            print("正在调整温度耐受性。")
             safeTransfer(sideConfig.scanner, sideConfig.scanner, 64, config.slot.scanner.ToBeAcc, "scanner", "T+-Acc", config.slot.scanner.TempAcc)
             waitForAcclimatiserOutput(sideConfig, acclimatiserConfig.timeout)
             safeTransfer(sideConfig.output, sideConfig.scanner, 64, 1, "output", "ToBeAcc", config.slot.scanner.ToBeAcc)
@@ -1581,10 +1593,10 @@ function utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig
         end
         bee = transposer.getStackInSlot(sideConfig.scanner, config.slot.scanner.ToBeAcc)
         humidityRange, temperatureRange = utility.getQueenHumidityAndTemperatureRange(bee)
-        assert(humidityRange ~= nil, "humidityRange must not be nil")
-        assert(temperatureRange ~= nil, "temperatureRange must not be nil")
+        assert(humidityRange ~= nil, "无法读取蜂后的湿度耐受范围。")
+        assert(temperatureRange ~= nil, "无法读取蜂后的温度耐受范围。")
         if humidityRange.max < acclimatiserConfig.humidity or acclimatiserConfig.humidity < humidityRange.min then
-            print("adjusting humidity tolerance.")
+            print("正在调整湿度耐受性。")
             safeTransfer(sideConfig.scanner, sideConfig.scanner, 64, config.slot.scanner.ToBeAcc, "scanner", "H+-Acc", config.slot.scanner.HumAcc)
             waitForAcclimatiserOutput(sideConfig, acclimatiserConfig.timeout)
             safeTransfer(sideConfig.output, sideConfig.scanner, 64, 1, "output", "ToBeAcc", config.slot.scanner.ToBeAcc)
@@ -1594,11 +1606,11 @@ function utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig
     end
 
     -- finally we put the queen back to the breeder
-    print("Adjusted queen moved to breeder.|调整后的蜂后已移至蜂箱。")
+    print("调整后的蜂后已移至蜂箱。")
     safeTransfer(sideConfig.scanner, sideConfig.breeder, 1, config.slot.scanner.ToBeAcc, "scanner", "breeder")
 
     if (not breeder.canBreed()) and transposer.getStackInSlot(sideConfig.breeder, 1) ~= nil then
-        print("Warning: Queen exists but cannot breed, even after tolerance adjustment. Please check the queen bee.")
+        print("警告：蜂后调整耐受性后仍无法繁育，请检查蜂后和蜂箱环境。")
     end
 
 end
@@ -1617,7 +1629,7 @@ function utility.forceImprintIfNeeded(containerSide, containerSlot, sideConfig)
     local bee = transposer.getStackInSlot(sideConfig.scanner, config.slot.scanner.cache)
 
     if bee.individual ~= nil and bee.individual.active == nil then
-        print(string.format("Bee is unscanned! Sending to scanner."))
+        print("蜜蜂尚未扫描，正在送往扫描仪。")
         safeTransfer(sideConfig.scanner, sideConfig.scanner, 64, config.slot.scanner.cache, "cache", "scanner", 1)
         while (transposer.getStackInSlot(sideConfig.output, 1) == nil) do
             os.sleep(1)
@@ -1633,9 +1645,9 @@ function utility.forceImprintIfNeeded(containerSide, containerSlot, sideConfig)
         return false
     end
 
-    print("Detected forced imprint genes. Imprint the bee now...")
+    print("检测到需强制压印的基因，正在压印……")
 
-    print(string.format("Sending bee to imprinter."))
+    print("正在将蜜蜂送往压印机。")
     safeTransfer(sideConfig.scanner, sideConfig.scanner, 64, config.slot.scanner.cache, "cache", "imprinter", config.slot.scanner.Imprinter)
     while (transposer.getStackInSlot(sideConfig.output, config.slot.output.imprinted) == nil) do
         os.sleep(1)
@@ -1644,7 +1656,7 @@ function utility.forceImprintIfNeeded(containerSide, containerSlot, sideConfig)
 
     bee = transposer.getStackInSlot(sideConfig.output, config.slot.output.imprinted)
     if bee.name == "gendustry:Waste" then
-        print("Imprinter killed the bee.")
+        print("蜜蜂在压印时死亡。")
         -- move waste to garbage
         safeTransfer(sideConfig.output, sideConfig.garbage, 64, config.slot.output.imprinted, "output", "garbage")
         return true
@@ -1696,7 +1708,7 @@ function safeTransfer(sideIn, sideOut, amount, slot, sideInName, sideOutName, sl
 
     if transferSuccess == 0 and transposer.getStackInSlot(sideIn, slot) ~= nil then
         if not noWarn then
-            print(string.format("TRANSFER FROM SLOT %d OF CONTAINER: %s TO CONTAINER: %s FAILED! PLEASE DO IT MANUALLY OR CLEAN THE %s CONTAINER!|转移物品失败，是不是箱子满了或者有杂物没拿出来", slot, sideInName:upper(), sideOutName:upper(), sideOutName:upper()))
+            print("转移物品失败，是不是箱子满了或者有杂物没拿出来")
         end
         while transposer.getStackInSlot(sideIn, slot) ~= nil do
             os.sleep(1)

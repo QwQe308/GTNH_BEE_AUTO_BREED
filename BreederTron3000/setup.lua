@@ -12,7 +12,7 @@ end
 local repo = "https://gh-proxy.org/https://raw.githubusercontent.com/QwQe308/GTNH_BEE_AUTO_BREED/";
 local branch = args[1] or "main"
 if #args > 1 or not branch:match("^[%w_][%w._-]*$") then
-    io.stderr:write("Usage: setup [branch] (for example: setup test)\n")
+    io.stderr:write("用法：setup [分支名]，例如 setup test。\n")
     return 1
 end
 
