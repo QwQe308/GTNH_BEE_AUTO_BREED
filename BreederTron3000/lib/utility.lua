@@ -236,18 +236,19 @@ end
 
 local function waitForBeeCycle(sideConfig, breeder, acclimatiserConfig, maximiseTolerance)
     local checkTolerance = breeder and acclimatiserConfig and acclimatiserConfig.useAcclimatiser
+    local recoveredDrones
     while not cycleIsDone(sideConfig) do
         if checkTolerance and IsBeeCycleStarted(sideConfig) then
-            utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig, maximiseTolerance)
+            recoveredDrones = utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig, maximiseTolerance)
             checkTolerance = false
         else
             os.sleep(checkTolerance and maximiseTolerance and 0.05 or 1)
         end
     end
+    return recoveredDrones
 end
 
 function utility.populateBee(beeName, sideConfig, targetCount, breeder, acclimatiserConfig)
-    local droneOutput = nil
     print("正在繁殖 " .. beeName .. " 的雄蜂，保证种群不会断代.")
     local princessSlot, droneSlot = utility.findPairString(beeName, beeName, sideConfig)
     if(princessSlot == -1 or droneSlot == -1) then
@@ -264,40 +265,32 @@ function utility.populateBee(beeName, sideConfig, targetCount, breeder, acclimat
     --Because the drones in storage are scanned you can only insert 1. the rest will be taken from output of the following cycles
     safeTransfer(sideConfig.storage, sideConfig.breeder, 1, princessSlot, "storage", "breeder")
     safeTransfer(sideConfig.storage, sideConfig.breeder, 1, droneSlot, "storage", "breeder")
-    local item = nil
-    while(item == nil or item.size < targetCount) do
-        waitForBeeCycle(sideConfig, breeder, acclimatiserConfig)
-        if droneOutput == nil then
-            for i=3,9 do
-                local candidate = transposer.getStackInSlot(sideConfig.breeder,i)
-                if candidate ~= nil then
-                    local _,type = utility.getItemName(candidate)
-                    if type == "Drone" then
-                        print("已定位雄蜂在蜂箱的第" .. i .. "格")
-                        if droneOutput ~= nil then
-                            print("程序运行繁育过程中，不应该有蜜蜂已经在蜂箱中，程序终止（请先清空蜂箱，并保证存储箱中没有杂合子再启动程序）")
-                            os.exit()
-                        end
-                        droneOutput = i
-                    end
+    local recoveredCount = 0
+    while true do
+        local recoveredDrones = waitForBeeCycle(sideConfig, breeder, acclimatiserConfig)
+        recoveredCount = recoveredCount + (recoveredDrones and recoveredDrones[beeName] or 0)
+        local droneOutput, princessOutput, droneCount
+        for i = 3, 9 do
+            local candidate = transposer.getStackInSlot(sideConfig.breeder, i)
+            local _, beeType = utility.getItemName(candidate)
+            if beeType == "Drone" then
+                if droneOutput ~= nil then
+                    print("程序运行繁育过程中，不应该有蜜蜂已经在蜂箱中，程序终止（请先清空蜂箱，并保证存储箱中没有杂合子再启动程序）")
+                    os.exit()
                 end
-            end
-        else
-            item = transposer.getStackInSlot(sideConfig.breeder, droneOutput)
-            print("繁殖进度: " .. item.size .. "/" .. targetCount)
-            if (item.size < targetCount) then
-                safeTransfer(sideConfig.breeder,sideConfig.breeder, 1, droneOutput, "breeder", "breeder") --Move a single drone back to the breeding slot
-                for i=3,9 do
-                    local candidate = transposer.getStackInSlot(sideConfig.breeder,i)
-                    if candidate ~= nil then
-                        local _,type = utility.getItemName(candidate)
-                        if type == "Princess" then
-                            safeTransfer(sideConfig.breeder,sideConfig.breeder,1, i, "breeder", "breeder") --Move princess back to breeding slot
-                        end
-                    end
-                end
+                droneOutput, droneCount = i, candidate.size
+            elseif beeType == "Princess" then
+                princessOutput = i
             end
         end
+        assert(droneOutput ~= nil and princessOutput ~= nil, "未找到繁育产出的公主蜂或雄蜂。")
+        local total = recoveredCount + droneCount
+        print("繁殖进度: " .. total .. "/" .. targetCount)
+        if total >= targetCount then
+            break
+        end
+        safeTransfer(sideConfig.breeder, sideConfig.breeder, 1, droneOutput, "breeder", "breeder")
+        safeTransfer(sideConfig.breeder, sideConfig.breeder, 1, princessOutput, "breeder", "breeder")
     end
     print("繁殖雄蜂完成，正在发送 " .. beeName .. " 种的雄蜂进行扫描.")
     for i=3,9 do
@@ -1576,25 +1569,86 @@ function utility.getQueenHumidityAndTemperatureRange(queen)
     return humidityRange, temperatureRange
 end
 
-local function waitForAcclimatiserOutput(sideConfig, timeout)
+local function storeRecoveredBee(sideConfig, outputSlot, count)
+    local templateSlot = transposer.getInventorySize(sideConfig.storage)
+    while count > 0 do
+        for slot = 1, templateSlot - 1 do
+            count = count - transposer.transferItem(sideConfig.output, sideConfig.storage, count, outputSlot, slot)
+            if count == 0 then
+                return
+            end
+        end
+        if transposer.getStackInSlot(sideConfig.output, outputSlot) == nil then
+            return
+        end
+        print("存储箱没有足够空间收回留种蜜蜂，请腾出空位。")
+        os.sleep(1)
+    end
+end
+
+local function findRecoveredQueen(sideConfig, recovery)
+    local queenSlot
+    local pendingScan = false
+    for slot = 1, transposer.getInventorySize(sideConfig.output) do
+        local item = transposer.getStackInSlot(sideConfig.output, slot)
+        if item then
+            local species, beeType = utility.getItemName(item)
+            if beeType == "Queen" then
+                queenSlot = queenSlot or slot
+            elseif (beeType == "Drone" or beeType == "Princess") and (not item.individual.active or not item.individual.inactive) then
+                local key = item.name .. (species or "")
+                local moved = transposer.transferItem(sideConfig.output, sideConfig.scanner, item.size, slot, 1)
+                if moved > 0 then
+                    recovery.scans[key] = (recovery.scans[key] or 0) + moved
+                end
+                pendingScan = true
+            else
+                if beeType == "Drone" or beeType == "Princess" then
+                    local key = item.name .. (species or "")
+                    local pending = recovery.scans[key]
+                    if pending then
+                        recovery.scans[key] = pending > item.size and pending - item.size or nil
+                    end
+                end
+                local keep = beeType == "Princess" or (beeType == "Drone" and utility.areGenesEqual(item.individual))
+                if keep then
+                    local count = item.size
+                    storeRecoveredBee(sideConfig, slot, count)
+                    if beeType == "Drone" and species then
+                        recovery.drones[species] = (recovery.drones[species] or 0) + count
+                    end
+                else
+                    repeat
+                        safeTransfer(sideConfig.output, sideConfig.garbage, item.size, slot, "output", "garbage")
+                        item = transposer.getStackInSlot(sideConfig.output, slot)
+                    until item == nil
+                end
+            end
+        end
+    end
+    return queenSlot, pendingScan or next(recovery.scans) ~= nil
+end
+
+local function waitForQueenOutput(sideConfig, recovery, timeout)
     local elapsedSeconds = 0
-    while transposer.getStackInSlot(sideConfig.output, 1) == nil do
-        if elapsedSeconds >= timeout then
+    while true do
+        local slot, pendingScan = findRecoveredQueen(sideConfig, recovery)
+        if slot and not pendingScan then
+            return slot
+        end
+        if not slot and timeout and elapsedSeconds >= timeout then
             print("等待适应性调整器超时，正在触发拆除装置以取回蜂后。")
             component.redstone.setOutput(sideConfig.acclimatiserBreaker, 15)
             os.sleep(config.blockBreakerRedstoneInterval)
             component.redstone.setOutput(sideConfig.acclimatiserBreaker, 0)
-            while transposer.getStackInSlot(sideConfig.output, 1) == nil do
-                os.sleep(1)
-            end
-            return
+            timeout = nil
         end
         os.sleep(1)
         elapsedSeconds = elapsedSeconds + 1
     end
 end
 
-local function adjustQueenTolerance(sideConfig, acclimatiserConfig, gene, machineSlot, machineName, isReady, maximiseTolerance)
+local function adjustQueenTolerance(sideConfig, acclimatiserConfig, gene, machineSlot, machineName, isReady, maximiseTolerance, recovery)
     local pendingSlot = config.slot.scanner.ToBeAcc
     local attempts = 0
     while true do
@@ -1611,8 +1665,8 @@ local function adjustQueenTolerance(sideConfig, acclimatiserConfig, gene, machin
         end
 
         safeTransfer(sideConfig.scanner, sideConfig.scanner, 1, pendingSlot, "scanner", machineName, machineSlot)
-        waitForAcclimatiserOutput(sideConfig, acclimatiserConfig.timeout)
-        safeTransfer(sideConfig.output, sideConfig.scanner, 1, 1, "output", "ToBeAcc", pendingSlot)
+        local queenSlot = waitForQueenOutput(sideConfig, recovery, acclimatiserConfig.timeout)
+        safeTransfer(sideConfig.output, sideConfig.scanner, 1, queenSlot, "output", "ToBeAcc", pendingSlot)
         attempts = attempts + 1
     end
 end
@@ -1621,6 +1675,8 @@ function utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig
     if not IsBeeCycleStarted(sideConfig) or (not maximiseTolerance and breeder.canBreed()) then
         return
     end
+    local recovery = {drones = {}, scans = {}}
+    local pendingSlot = config.slot.scanner.ToBeAcc
     if maximiseTolerance then
         print("正在检查蜂后的温湿度全 5 耐受基因……")
     else
@@ -1632,41 +1688,37 @@ function utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig
     os.sleep(config.blockBreakerRedstoneInterval)
     component.redstone.setOutput(sideConfig.apiaryBreaker, 0)
     os.sleep(config.blockBreakerRedstoneInterval)
-    while (transposer.getStackInSlot(sideConfig.output, 1) == nil) do
-        os.sleep(1)
-    end
-    -- after breaking, queen appears in the output slot 1
-    safeTransfer(sideConfig.output, sideConfig.scanner, 64, 1, "output", "ToBeAcc", config.slot.scanner.ToBeAcc)
-    while (transposer.getStackInSlot(sideConfig.scanner, config.slot.scanner.ToBeAcc) == nil) do
-        os.sleep(1)
-    end
-    -- queen transferred to scanner#21
+    local queenSlot = waitForQueenOutput(sideConfig, recovery)
+    safeTransfer(sideConfig.output, sideConfig.scanner, 1, queenSlot, "output", "ToBeAcc", pendingSlot)
 
-    local bee = transposer.getStackInSlot(sideConfig.scanner, config.slot.scanner.ToBeAcc)
+    local bee = transposer.getStackInSlot(sideConfig.scanner, pendingSlot)
     if bee.individual ~= nil and bee.individual.active == nil then
         print("蜂后尚未扫描，正在送往扫描仪。")
-        safeTransfer(sideConfig.scanner, sideConfig.scanner, 64, config.slot.scanner.ToBeAcc, "output", "scanner", 1)
-        while (transposer.getStackInSlot(sideConfig.output, 1) == nil) do
-            os.sleep(1)
-        end
-        safeTransfer(sideConfig.output, sideConfig.scanner, 64, 1, "output", "ToBeAcc", config.slot.scanner.ToBeAcc)
+        safeTransfer(sideConfig.scanner, sideConfig.scanner, 1, pendingSlot, "ToBeAcc", "scanner", 1)
+        queenSlot = waitForQueenOutput(sideConfig, recovery)
+        safeTransfer(sideConfig.output, sideConfig.scanner, 1, queenSlot, "output", "ToBeAcc", pendingSlot)
     end
     local temperatureOK = adjustQueenTolerance(sideConfig, acclimatiserConfig, "temperatureTolerance",
         config.slot.scanner.TempAcc, "T+-Acc", function(queen)
             local _, range = utility.getQueenHumidityAndTemperatureRange(queen)
             assert(range ~= nil, "无法读取蜂后的温度耐受范围。")
             return range.min <= acclimatiserConfig.temperature and acclimatiserConfig.temperature <= range.max
-        end, maximiseTolerance)
+        end, maximiseTolerance, recovery)
     local humidityOK = adjustQueenTolerance(sideConfig, acclimatiserConfig, "humidityTolerance",
         config.slot.scanner.HumAcc, "H+-Acc", function(queen)
             local range = utility.getQueenHumidityAndTemperatureRange(queen)
             assert(range ~= nil, "无法读取蜂后的湿度耐受范围。")
             return range.min <= acclimatiserConfig.humidity and acclimatiserConfig.humidity <= range.max
-        end, maximiseTolerance)
+        end, maximiseTolerance, recovery)
 
     -- finally we put the queen back to the breeder
     print("调整后的蜂后已移至蜂箱。")
-    safeTransfer(sideConfig.scanner, sideConfig.breeder, 1, config.slot.scanner.ToBeAcc, "scanner", "breeder")
+    local _, pendingScan = findRecoveredQueen(sideConfig, recovery)
+    while pendingScan do
+        os.sleep(1)
+        _, pendingScan = findRecoveredQueen(sideConfig, recovery)
+    end
+    safeTransfer(sideConfig.scanner, sideConfig.breeder, 1, pendingSlot, "scanner", "breeder")
 
     if not (temperatureOK and humidityOK) then
         error("调整器未能将温湿度耐受性提升到全 5。蜂后已放回蜂箱，请检查双向耗材和超时设置。", 0)
@@ -1674,7 +1726,7 @@ function utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig
     if (not breeder.canBreed()) and transposer.getStackInSlot(sideConfig.breeder, 1) ~= nil then
         print("警告：蜂后调整耐受性后仍无法繁育，请检查蜂后和蜂箱环境。")
     end
-
+    return recovery.drones
 end
 
 ---check if we should imprint the bee immediately.
