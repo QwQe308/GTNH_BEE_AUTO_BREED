@@ -1045,6 +1045,27 @@ local function continueImprinting(sideConfig, princessSlot, droneSlot, offspring
     storeStableOffspring(sideConfig, offspring)
 end
 
+local function discardOldImprintDrones(sideConfig, side, princess, beeName)
+    local size = transposer.getInventorySize(side)
+    local isStorage = side == sideConfig.storage
+    local lastSlot = isStorage and size - 1 or size
+    local species = princess.individual.active.species
+    for slot, bee in pairs(getInventorySnapshot(side, size)) do
+        local name, beeType = utility.getItemName(bee)
+        local individual = bee.individual
+        if slot <= lastSlot and beeType == "Drone" and name == beeName and individual.active and individual.inactive then
+            local droneSpecies = individual.active.species
+            if (not species.uid or (droneSpecies and droneSpecies.uid == species.uid))
+                and not isMatchingPair(princess, bee, beeName) then
+                repeat
+                    safeTransfer(side, sideConfig.garbage, bee.size, slot, isStorage and "storage" or "output", "garbage")
+                    bee = transposer.getStackInSlot(side, slot)
+                until not bee
+            end
+        end
+    end
+end
+
 function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, breeder, acclimatiserConfig)
     print("正在将模板基因压印到 " .. beeName .. " 蜂。")
     local size = transposer.getInventorySize(sideConfig.storage)
@@ -1077,8 +1098,10 @@ function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, breeder
     local stabilisingTolerance = stabiliseTolerance and not pairHasMaxTolerance
     local toleranceCycles = 0
 
-    if (not stabiliseTolerance or pairHasMaxTolerance)
-        and utility.isGeneticallyEquivalent(basePrincess, stabiliseTolerance and baseDrone or templateDrone, targetGenes, true) then
+    if basePrincess.individual.active and basePrincess.individual.inactive
+        and utility.isGeneticallyEquivalent(basePrincess, basePrincess, targetGenes, true)
+        and countStockDrones(sideConfig, basePrincess, beeName, size) > 0 then
+        discardOldImprintDrones(sideConfig, sideConfig.storage, basePrincess, beeName)
         print("该蜂种已有模板基因，跳过压印。")
         return false
     end
@@ -1175,11 +1198,14 @@ function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, breeder
 
         local geneticSum = princessScore + bestDroneScore
         print("基因评分：" .. geneticSum .. "/" .. config.targetSum*2)
-        if (not stabiliseTolerance or pairHasMaxTolerance) and tostring(geneticSum) == tostring(config.targetSum*2) then
+        if (not stabiliseTolerance or pairHasMaxTolerance) and tostring(geneticSum) == tostring(config.targetSum*2)
+            and isMatchingPair(princess, bestDrone, beeName) then
             print("基因压印成功。")
             storeRecoveredBee(sideConfig, princessSlot, princess.size)
             storeRecoveredBee(sideConfig, bestDroneSlot, bestDrone.size)
             print("基因压印蜜蜂已移至存储箱。")
+            discardOldImprintDrones(sideConfig, sideConfig.storage, princess, beeName)
+            discardOldImprintDrones(sideConfig, sideConfig.output, princess, beeName)
             storeStableOffspring(sideConfig, offspring)
             return true
         end
