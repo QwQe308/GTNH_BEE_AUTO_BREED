@@ -20,10 +20,20 @@ local function staged(path)
     return filesystem.concat(stage, path)
 end
 local function readFile(path)
-    local file = assert(io.open(path, "r"))
+    local file, reason = io.open(path, "r")
+    assert(file, "无法读取 " .. path .. "：" .. tostring(reason or "打开失败"))
     local contents = file:read("*a")
     file:close()
     return contents
+end
+local function moveFile(source, target)
+    local moved, reason = filesystem.rename(source, target)
+    assert(moved, "无法移动 " .. source .. " 到 " .. target .. "：" .. tostring(reason or "重命名失败"))
+end
+local function download(url, path)
+    local quotedPath = "'" .. path:gsub("'", "'\\''") .. "'"
+    local ok = shell.execute("wget -f " .. url .. " " .. quotedPath)
+    return (ok == true or ok == 0) and filesystem.exists(path)
 end
 
 if filesystem.exists(stage) then
@@ -43,7 +53,7 @@ local function install()
     if not revision then
         local url = "https://api.github.com/repos/" .. repo .. "/git/ref/heads/" .. branch
         local response = staged("branch.json")
-        assert(wget("-fq", url, response) or wget("-fq", proxy .. url, response),
+        assert(wget("-fQ", proxy .. url, response) or wget("-fQ", url, response),
             "无法查询分支版本。可传入该分支的完整提交 SHA。")
         local ref = readFile(response)
         local resolvedRef = ref:match('"ref"%s*:%s*"([^"]+)"')
@@ -55,17 +65,25 @@ local function install()
     local raw = proxy .. "https://raw.githubusercontent.com/" .. repo .. "/" .. revision .. "/BreederTron3000/"
     for index, path in ipairs(scripts) do
         local pathInStage = staged("new-" .. index)
-        assert(wget("-q", raw .. path, pathInStage), "下载失败：" .. path)
-        assert(readFile(pathInStage):find("%S") and loadfile(pathInStage), "下载的脚本无效：" .. path)
+        assert(download(raw .. path, pathInStage), "下载失败：" .. path)
+        local script, syntaxError = loadfile(pathInStage)
+        assert(script and readFile(pathInStage):find("%S"), "下载的脚本无效：" .. path .. " " .. tostring(syntaxError or "空文件"))
     end
-    local version = assert(io.open(staged("new-" .. (#scripts + 1)), "w"))
-    local written, writeError = version:write(branch .. " " .. revision .. "\n")
-    local closed, closeError = version:close()
-    assert(written and closed, writeError or closeError)
+    local versionPath = staged("new-" .. (#scripts + 1))
+    local versionText = branch .. " " .. revision .. "\n"
+    local version, openError = io.open(versionPath, "w")
+    assert(version, "无法创建版本记录：" .. tostring(openError or "打开失败"))
+    local written, writeError = version:write(versionText)
+    local flushed, flushError = version:flush()
+    version:close()
+    -- OpenOS file handles may return nil on a successful close.
+    assert(written and flushed, "无法写入版本记录：" .. tostring(writeError or flushError or "写入失败"))
+    assert(readFile(versionPath) == versionText, "版本记录写入后校验失败。")
 
     local lib = filesystem.concat(root, "lib")
     if not filesystem.exists(lib) then
-        assert(filesystem.makeDirectory(lib))
+        local created, createError = filesystem.makeDirectory(lib)
+        assert(created, "无法创建脚本目录 " .. lib .. "：" .. tostring(createError or "创建失败"))
     end
     for _, path in ipairs(scripts) do
         changes[#changes + 1] = {path = filesystem.concat(root, path)}
@@ -75,10 +93,10 @@ local function install()
         change.backup = staged("old-" .. index)
         if filesystem.exists(change.path) then
             assert(not filesystem.isDirectory(change.path), "脚本路径是目录：" .. change.path)
-            assert(filesystem.rename(change.path, change.backup))
+            moveFile(change.path, change.backup)
             change.saved = true
         end
-        assert(filesystem.rename(staged("new-" .. index), change.path))
+        moveFile(staged("new-" .. index), change.path)
         change.installed = true
     end
 
@@ -90,7 +108,7 @@ local function install()
             backup = oldConfig.path .. ".previous." .. suffix
             suffix = suffix + 1
         end
-        assert(filesystem.rename(oldConfig.backup, backup))
+        moveFile(oldConfig.backup, backup)
         oldConfig.saved = false
         print("上一版脚本配置已备份到 " .. backup)
     end
