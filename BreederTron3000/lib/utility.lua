@@ -8,6 +8,7 @@ local utility = {}
 local transposer = component.transposer
 local modem = nil
 local lastRequirements = nil
+local inventoryPollInterval = 0.1
 if next(component.list("modem")) ~= nil then
     modem = component.modem
 end
@@ -107,7 +108,7 @@ function utility.listBeesInStorage(sideConfig)
                 print(string.format("在第%d个栏位的蜜蜂还没有扫描，正在送去扫描", i))
                 safeTransfer(sideConfig.storage, sideConfig.scanner, 64, i, "storage", "scanner")
                 while (transposer.getStackInSlot(sideConfig.output, 1) == nil) do
-                    os.sleep(1)
+                    os.sleep(inventoryPollInterval)
                 end
                 bee = transposer.getStackInSlot(sideConfig.output, 1)
                 print("送回存储箱")
@@ -234,19 +235,38 @@ function utility.convertPrincess(beeName, sideConfig, droneReq, breeder, acclima
     return true
 end
 
-local function waitForBeeCycle(sideConfig, breeder, acclimatiserConfig, maximiseTolerance)
+local function waitForBeeCycle(sideConfig, breeder, acclimatiserConfig, missingTolerance)
     local checkTolerance = breeder and acclimatiserConfig and acclimatiserConfig.useAcclimatiser
     while not cycleIsDone(sideConfig) do
         if checkTolerance and IsBeeCycleStarted(sideConfig) then
-            utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig, maximiseTolerance)
+            utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig, missingTolerance)
             checkTolerance = false
         else
-            os.sleep(checkTolerance and maximiseTolerance and 0.05 or 1)
+            os.sleep(checkTolerance and missingTolerance and 0.05 or inventoryPollInterval)
         end
     end
 end
 
 local maxTolerance = "BOTH_5"
+
+local function carriesMaxTolerance(bee, gene)
+    local individual = bee and bee.individual
+    return individual and ((individual.active and individual.active[gene] == maxTolerance)
+        or (individual.inactive and individual.inactive[gene] == maxTolerance))
+end
+
+local function getMissingTolerance(princess, drone)
+    local temperature = not (carriesMaxTolerance(princess, "temperatureTolerance") or carriesMaxTolerance(drone, "temperatureTolerance"))
+    local humidity = not (carriesMaxTolerance(princess, "humidityTolerance") or carriesMaxTolerance(drone, "humidityTolerance"))
+    if temperature or humidity then
+        return {temperatureTolerance = temperature, humidityTolerance = humidity}
+    end
+end
+
+local function getToleranceCoverage(princess, drone)
+    local missing = getMissingTolerance(princess, drone)
+    return missing and (2 - (missing.temperatureTolerance and 1 or 0) - (missing.humidityTolerance and 1 or 0)) or 2
+end
 
 local function parseTolerance(tolerance)
     local direction, magnitude = tolerance:match("^(%u+)_(%d+)$")
@@ -313,41 +333,85 @@ end
 
 local function getScannedOffspring(sideConfig)
     local outputSize = transposer.getInventorySize(sideConfig.output)
+    local scannerSlots = math.min(5, transposer.getInventorySize(sideConfig.scanner))
     local expectedCount = 0
-    local offspring = {}
+    local pending = {}
     for slot = 3, 9 do
         local item = transposer.getStackInSlot(sideConfig.breeder, slot)
         if item then
             local _, beeType = utility.getItemName(item)
             if beeType == "Princess" or beeType == "Drone" then
                 expectedCount = expectedCount + item.size
-                safeTransfer(sideConfig.breeder, sideConfig.scanner, item.size, slot, "breeder", "scanner", 1)
-                local scannedCount
-                repeat
-                    offspring, scannedCount = {}, 0
-                    for outputSlot = 1, outputSize do
-                        local bee = transposer.getStackInSlot(sideConfig.output, outputSlot)
-                        local _, kind = utility.getItemName(bee)
-                        if (kind == "Princess" or kind == "Drone") and bee.individual.active and bee.individual.inactive then
-                            offspring[outputSlot] = bee
-                            scannedCount = scannedCount + bee.size
-                        end
-                    end
-                    if scannedCount < expectedCount then
-                        os.sleep(1)
-                    end
-                until scannedCount >= expectedCount
+                if item.individual.active and item.individual.inactive then
+                    repeat
+                        safeTransfer(sideConfig.breeder, sideConfig.output, item.size, slot, "breeder", "output")
+                        item = transposer.getStackInSlot(sideConfig.breeder, slot)
+                    until item == nil
+                else
+                    pending[slot] = item.size
+                end
             else
                 safeTransfer(sideConfig.breeder, sideConfig.garbage, item.size, slot, "breeder", "garbage")
             end
         end
     end
-    return offspring
+    if expectedCount == 0 then
+        return {}
+    end
+
+    while next(pending) do
+        for slot, count in pairs(pending) do
+            for scannerSlot = 1, scannerSlots do
+                count = count - transposer.transferItem(sideConfig.breeder, sideConfig.scanner, count, slot, scannerSlot)
+                if count == 0 then
+                    break
+                end
+            end
+            pending[slot] = count > 0 and count or nil
+        end
+        if next(pending) then
+            os.sleep(inventoryPollInterval)
+        end
+    end
+
+    while true do
+        local offspring, scannedCount = {}, 0
+        for slot = 1, outputSize do
+            local bee = transposer.getStackInSlot(sideConfig.output, slot)
+            local _, beeType = utility.getItemName(bee)
+            if (beeType == "Princess" or beeType == "Drone") and bee.individual.active and bee.individual.inactive then
+                offspring[slot] = bee
+                scannedCount = scannedCount + bee.size
+            end
+        end
+        if scannedCount >= expectedCount then
+            return offspring
+        end
+        os.sleep(inventoryPollInterval)
+    end
 end
 
 local function isMatchingPair(princess, drone, beeName)
     return utility.getBeePureness(beeName, princess) == 2
         and utility.isGeneticallyEquivalent(princess, drone, princess.individual.active, false)
+end
+
+local function countStockDrones(sideConfig, princess, beeName, storageSize)
+    local total = 0
+    for slot = 1, storageSize - 1 do
+        local bee = transposer.getStackInSlot(sideConfig.storage, slot)
+        local _, beeType = utility.getItemName(bee)
+        if beeType == "Drone" and bee.individual.active and bee.individual.inactive and isMatchingPair(princess, bee, beeName) then
+            total = total + bee.size
+        end
+    end
+    return total
+end
+
+local function getDroneToleranceRank(princess, drone, beeName)
+    -- Lower-priority scores fit within one unit of the next priority.
+    local alleleScore = countMaxTolerance(drone) * 41 + getToleranceScore(drone)
+    return (utility.getBeePureness(beeName, drone) * 3 + getToleranceCoverage(princess, drone)) * 205 + alleleScore
 end
 
 local function findStockDrone(sideConfig, princess, beeName, preferMaxTolerance)
@@ -356,7 +420,7 @@ local function findStockDrone(sideConfig, princess, beeName, preferMaxTolerance)
         local bee = transposer.getStackInSlot(sideConfig.storage, slot)
         local species, beeType = utility.getItemName(bee)
         if beeType == "Drone" and species == beeName and bee.individual.active and bee.individual.inactive then
-            local score = (preferMaxTolerance and getToleranceScore(bee) or 0) * 2
+            local score = (preferMaxTolerance and getDroneToleranceRank(princess, bee, beeName) or 0) * 2
                 + (isMatchingPair(princess, bee, beeName) and 1 or 0)
             if score > bestScore then
                 bestSlot, bestScore = slot, score
@@ -364,6 +428,18 @@ local function findStockDrone(sideConfig, princess, beeName, preferMaxTolerance)
         end
     end
     return bestSlot
+end
+
+local function chooseToleranceDrone(sideConfig, princess, drone, outputSlot, beeName, stabiliseTolerance)
+    if stabiliseTolerance and getMissingTolerance(princess, drone) then
+        local stockSlot = findStockDrone(sideConfig, princess, beeName, true)
+        local stock = stockSlot and transposer.getStackInSlot(sideConfig.storage, stockSlot)
+        if stock and utility.getBeePureness(beeName, stock) == 2
+            and getToleranceCoverage(princess, stock) > getToleranceCoverage(princess, drone) then
+            return sideConfig.storage, stockSlot, "storage", stock
+        end
+    end
+    return sideConfig.output, outputSlot, "output", drone
 end
 
 function utility.populateBee(beeName, sideConfig, targetCount, breeder, acclimatiserConfig, stabiliseTolerance)
@@ -387,16 +463,20 @@ function utility.populateBee(beeName, sideConfig, targetCount, breeder, acclimat
         return false
     end
     local drone = transposer.getStackInSlot(sideConfig.storage, droneSlot)
-    local needsTolerance = useAcclimatiser and (countMaxTolerance(princess) < 4 or countMaxTolerance(drone) < 4)
+    local storageSize = transposer.getInventorySize(sideConfig.storage)
+    if (not useAcclimatiser or countMaxTolerance(princess) == 4)
+        and countStockDrones(sideConfig, princess, beeName, storageSize) >= targetCount then
+        return true
+    end
+    local missingTolerance = useAcclimatiser and getMissingTolerance(princess, drone)
     if cycleIsDone(sideConfig) or transposer.getStackInSlot(sideConfig.breeder, 1) ~= nil
         or transposer.getStackInSlot(sideConfig.breeder, 2) ~= nil then
         error("蜂箱里仍有上一轮的蜜蜂。请先收回公主蜂和雄蜂，再重新运行。", 0)
     end
     safeTransfer(sideConfig.storage, sideConfig.breeder, 1, princessSlot, "storage", "breeder")
     safeTransfer(sideConfig.storage, sideConfig.breeder, 1, droneSlot, "storage", "breeder")
-    local storageSize = transposer.getInventorySize(sideConfig.storage)
     for cycle = 1, config.imprintToleranceCycleLimit do
-        waitForBeeCycle(sideConfig, breeder, acclimatiserConfig, needsTolerance)
+        waitForBeeCycle(sideConfig, breeder, acclimatiserConfig, missingTolerance)
         local offspring = getScannedOffspring(sideConfig)
         local princessOutput, bestDroneOutput, bestScore = nil, nil, -1
         for slot, bee in pairs(offspring) do
@@ -416,10 +496,8 @@ function utility.populateBee(beeName, sideConfig, targetCount, breeder, acclimat
                 if matchingPair then
                     total = total + bee.size
                 end
-                local pureness = utility.getBeePureness(beeName, bee)
-                local tolerance = useAcclimatiser and getToleranceScore(bee) or 0
-                -- Species purity takes priority over the tolerance score (0–40).
-                local score = pureness * 123 + tolerance * 3
+                local rank = useAcclimatiser and getDroneToleranceRank(princess, bee, beeName) or utility.getBeePureness(beeName, bee)
+                local score = rank * 3
                     + (matchingPair and 2 or (utility.areGenesEqual(bee.individual) and 1 or 0))
                 if score > bestScore then
                     bestDroneOutput, bestScore = slot, score
@@ -427,18 +505,14 @@ function utility.populateBee(beeName, sideConfig, targetCount, breeder, acclimat
             end
         end
         assert(bestDroneOutput, "未找到繁育产出的雄蜂。")
-        for slot = 1, storageSize - 1 do
-            local bee = transposer.getStackInSlot(sideConfig.storage, slot)
-            local _, beeType = utility.getItemName(bee)
-            if beeType == "Drone" and bee.individual.active and bee.individual.inactive and isMatchingPair(princess, bee, beeName) then
-                total = total + bee.size
-            end
-        end
-        needsTolerance = useAcclimatiser and (countMaxTolerance(princess) < 4 or countMaxTolerance(offspring[bestDroneOutput]) < 4)
-        local done = total >= targetCount and not needsTolerance
+        total = total + countStockDrones(sideConfig, princess, beeName, storageSize)
+        local done = total >= targetCount and (not useAcclimatiser or countMaxTolerance(princess) == 4)
         print("繁殖进度: " .. total .. "/" .. targetCount)
         if not done and cycle < config.imprintToleranceCycleLimit then
-            safeTransfer(sideConfig.output, sideConfig.breeder, 1, bestDroneOutput, "output", "breeder")
+            local droneSide, nextDroneSlot, droneContainer, nextDrone = chooseToleranceDrone(
+                sideConfig, princess, offspring[bestDroneOutput], bestDroneOutput, beeName, useAcclimatiser)
+            missingTolerance = useAcclimatiser and getMissingTolerance(princess, nextDrone)
+            safeTransfer(droneSide, sideConfig.breeder, 1, nextDroneSlot, droneContainer, "breeder")
             safeTransfer(sideConfig.output, sideConfig.breeder, 1, princessOutput, "output", "breeder")
         end
         storeStableOffspring(sideConfig, offspring, cycle == config.imprintToleranceCycleLimit and bestDroneOutput or nil)
@@ -892,9 +966,7 @@ function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, breeder
     safeTransfer(sideConfig.storage, sideConfig.breeder, 1, basePrincessSlot, "storage", "breeder")
     local useBaseDrone = stabilisingTolerance or (pairHasMaxTolerance and utility.hasTargetGenes(basePrincess, baseDrone, targetGenes))
     safeTransfer(sideConfig.storage, sideConfig.breeder, 1, useBaseDrone and baseDroneSlot or size, "storage", "breeder")
-    if not useBaseDrone then
-        pairHasMaxTolerance = pairHasMaxTolerance and countMaxTolerance(templateDrone) == 4
-    end
+    local missingTolerance = stabiliseTolerance and getMissingTolerance(basePrincess, useBaseDrone and baseDrone or templateDrone)
     
     local isImprinted = false
     local princess = nil
@@ -915,7 +987,7 @@ function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, breeder
         bestDroneScore = -1
         bestDronePureness = 0
         bestDroneSlot = nil
-        waitForBeeCycle(sideConfig, breeder, acclimatiserConfig, stabiliseTolerance and not pairHasMaxTolerance)
+        waitForBeeCycle(sideConfig, breeder, acclimatiserConfig, missingTolerance)
         print("正在扫描……")
         local offspring = getScannedOffspring(sideConfig)
         if next(offspring) == nil then
@@ -925,17 +997,22 @@ function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, breeder
         end
         print("正在评估基因……")
         for i, bee in pairs(offspring) do
-            local _,type = utility.getItemName(bee)
-            if type == "Princess" then
+            local _, beeType = utility.getItemName(bee)
+            if beeType == "Princess" then
                 princess = bee
                 princessScore = utility.getGeneticScore(bee, targetGenes, basePrincess.individual.active.species, config.geneWeights)
                 princessPureness = utility.getBeePureness(beeName, bee)
                 princessSlot = i
-            else
+                break
+            end
+        end
+        assert(princessSlot, "未找到可配对的公主蜂。")
+        for i, bee in pairs(offspring) do
+            local _, beeType = utility.getItemName(bee)
+            if beeType == "Drone" then
                 local droneScore = utility.getGeneticScore(bee, targetGenes, basePrincess.individual.active.species, config.geneWeights)
                 local pureness = utility.getBeePureness(beeName, bee)
-                -- Prefer drones of the original species before ranking their four tolerance alleles.
-                local droneTolerance = stabilisingTolerance and (pureness * 41 + getToleranceScore(bee)) or 0
+                local droneTolerance = stabilisingTolerance and getDroneToleranceRank(princess, bee, beeName) or 0
                 if droneTolerance > bestDroneTolerance or (droneTolerance == bestDroneTolerance and droneScore > bestDroneScore) then
                     bestDrone = bee
                     bestDroneScore = droneScore
@@ -945,8 +1022,9 @@ function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, breeder
                 end
             end
         end
-        assert(princessSlot and bestDroneSlot, "未找到可配对的公主蜂和雄蜂。")
+        assert(bestDroneSlot, "未找到可配对的雄蜂。")
 
+        missingTolerance = stabiliseTolerance and getMissingTolerance(princess, bestDrone)
         pairHasMaxTolerance = stabiliseTolerance and countMaxTolerance(princess) == 4 and countMaxTolerance(bestDrone) == 4
         local stillStabilising = stabilisingTolerance and (not pairHasMaxTolerance or princessPureness + bestDronePureness < 4)
         if stabiliseTolerance and (not pairHasMaxTolerance or stillStabilising) then
@@ -961,7 +1039,12 @@ function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, breeder
         end
         if stillStabilising then
             print("正在选配同种后代，继续固定温湿度耐受性。")
-            continueImprinting(sideConfig, princessSlot, bestDroneSlot, offspring)
+            local droneSide, droneSlot, droneContainer, nextDrone = chooseToleranceDrone(
+                sideConfig, princess, bestDrone, bestDroneSlot, beeName, stabiliseTolerance)
+            missingTolerance = getMissingTolerance(princess, nextDrone)
+            safeTransfer(droneSide, sideConfig.breeder, 1, droneSlot, droneContainer, "breeder")
+            safeTransfer(sideConfig.output, sideConfig.breeder, 1, princessSlot, "output", "breeder")
+            storeStableOffspring(sideConfig, offspring)
             goto continue
         end
         if stabilisingTolerance then
@@ -986,19 +1069,19 @@ function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, breeder
                 print("现有亲本可繁育出目标基因，继续繁育。")
                 continueImprinting(sideConfig, princessSlot, bestDroneSlot, offspring)
             else
-                pairHasMaxTolerance = false
                 print("现有亲本无法繁育出目标基因，改用模板雄蜂。")
                 while (transposer.getStackInSlot(sideConfig.storage, size) == nil) do
                     print("模板雄蜂已用完，请补充。")
                     os.sleep(5)
                 end
+                local nextDrone = transposer.getStackInSlot(sideConfig.storage, size)
+                missingTolerance = stabiliseTolerance and getMissingTolerance(princess, nextDrone)
                 safeTransfer(sideConfig.output, sideConfig.breeder, 1, princessSlot, "output", "breeder")
                 safeTransfer(sideConfig.storage, sideConfig.breeder, 1, size, "storage", "breeder") -- Last slot in storage is reserved for template bees.
                 storeStableOffspring(sideConfig, offspring)
             end
 
         elseif (princessPureness + bestDronePureness) == 0 then
-            pairHasMaxTolerance = false
             print("后代已失去原品种。")
             print("正在查找备用雄蜂……")
             local bestReserveDrone = nil
@@ -1009,17 +1092,22 @@ function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, breeder
                 bestReserveDrone = transposer.getStackInSlot(sideConfig.garbage, bestReserveSlot)
             end
             if bestReserveDrone ~= nil then
+                missingTolerance = stabiliseTolerance and getMissingTolerance(princess, bestReserveDrone)
                 print("已找到备用雄蜂，基因评分：" .. bestReserveScore .. "/" .. config.targetSum)
                 safeTransfer(sideConfig.garbage, sideConfig.breeder, 1, bestReserveSlot, "garbage", "breeder")
                 safeTransfer(sideConfig.output, sideConfig.breeder, 1, princessSlot, "output", "breeder")
                 storeStableOffspring(sideConfig, offspring)
             else
                 print("找不到备用雄蜂，改用原品种的雄蜂。")
-                safeTransfer(sideConfig.output, sideConfig.breeder, 1, princessSlot, "output", "breeder")
-                if (safeTransfer(sideConfig.storage, sideConfig.breeder, 1, baseDroneSlot, "storage", "breeder") == 0) then
+                local nextDrone = transposer.getStackInSlot(sideConfig.storage, baseDroneSlot)
+                if not nextDrone then
+                    storeStableOffspring(sideConfig, offspring, bestDroneSlot)
                     print("原品种的雄蜂已用完，程序终止。")
-                    os.exit()
+                    return false
                 end
+                missingTolerance = stabiliseTolerance and getMissingTolerance(princess, nextDrone)
+                safeTransfer(sideConfig.output, sideConfig.breeder, 1, princessSlot, "output", "breeder")
+                safeTransfer(sideConfig.storage, sideConfig.breeder, 1, baseDroneSlot, "storage", "breeder")
                 storeStableOffspring(sideConfig, offspring)
             end
         elseif (princessPureness + bestDronePureness) == 1 then
@@ -1718,12 +1806,12 @@ local function waitForQueenOutput(sideConfig, recovery, timeout)
     end
 end
 
-local function adjustQueenTolerance(sideConfig, acclimatiserConfig, gene, machineSlot, machineName, isReady, maximiseTolerance, recovery)
+local function adjustQueenTolerance(sideConfig, acclimatiserConfig, gene, machineSlot, machineName, isReady, improveTolerance, recovery)
     local pendingSlot = config.slot.scanner.ToBeAcc
     local attempts = 0
     while true do
         local queen = transposer.getStackInSlot(sideConfig.scanner, pendingSlot)
-        if isReady(queen) and (not maximiseTolerance or attempts > 0 or queen.individual.active[gene] == maxTolerance) then
+        if isReady(queen) and (not improveTolerance or attempts > 0 or carriesMaxTolerance(queen, gene)) then
             return true
         end
         if attempts >= config.imprintToleranceAdjustmentLimit then
@@ -1737,14 +1825,14 @@ local function adjustQueenTolerance(sideConfig, acclimatiserConfig, gene, machin
     end
 end
 
-function utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig, maximiseTolerance)
-    if not IsBeeCycleStarted(sideConfig) or (not maximiseTolerance and breeder.canBreed()) then
+function utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig, missingTolerance)
+    if not IsBeeCycleStarted(sideConfig) or (not missingTolerance and breeder.canBreed()) then
         return
     end
     local recovery = {scans = {}}
     local pendingSlot = config.slot.scanner.ToBeAcc
-    if maximiseTolerance then
-        print("正在检查蜂后的温湿度全 5 耐受基因……")
+    if missingTolerance then
+        print("亲本缺少一项或多项全 5 耐受基因，正在检查蜂后能否补足……")
     else
         print("蜂后无法繁育，正在检查温湿度耐受性……")
     end
@@ -1769,16 +1857,16 @@ function utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig
             local _, range = utility.getQueenHumidityAndTemperatureRange(queen)
             assert(range ~= nil, "无法读取蜂后的温度耐受范围。")
             return range.min <= acclimatiserConfig.temperature and acclimatiserConfig.temperature <= range.max
-        end, maximiseTolerance, recovery)
+        end, missingTolerance and missingTolerance.temperatureTolerance, recovery)
     local humidityOK = adjustQueenTolerance(sideConfig, acclimatiserConfig, "humidityTolerance",
         config.slot.scanner.HumAcc, "H+-Acc", function(queen)
             local range = utility.getQueenHumidityAndTemperatureRange(queen)
             assert(range ~= nil, "无法读取蜂后的湿度耐受范围。")
             return range.min <= acclimatiserConfig.humidity and acclimatiserConfig.humidity <= range.max
-        end, maximiseTolerance, recovery)
+        end, missingTolerance and missingTolerance.humidityTolerance, recovery)
 
     local adjustedQueen = transposer.getStackInSlot(sideConfig.scanner, pendingSlot)
-    if maximiseTolerance and temperatureOK and humidityOK and countMaxTolerance(adjustedQueen) < 4 then
+    if missingTolerance and temperatureOK and humidityOK and countMaxTolerance(adjustedQueen) < 4 then
         print("本轮调整结束。正在送回蜂箱繁育，下一轮将按子代的耐受基因选配。")
     end
     print("调整后的蜂后已移至蜂箱。")
