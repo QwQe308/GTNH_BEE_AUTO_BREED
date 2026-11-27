@@ -33,6 +33,8 @@ The breeder of all breeders. Breeds from whatever you have in your bee chest up 
 wget -f https://gh-proxy.org/https://raw.githubusercontent.com/QwQe308/GTNH_BEE_AUTO_BREED/main/BreederTron3000/setup.lua setup.lua && setup
 ```
 
+安装器会显示当前安装的提交版本，下载齐全后自动替换旧脚本。`sideConfig.lua` 和 `acclimatiserConfig.lua` 会保留。若新版自带的 `lib/config.lua` 有变化，旧文件会另存为 `lib/config.lua.previous` 或带编号的备份，便于找回手动修改。
+
 将 4 个箱子、蜂箱紧贴转运器，算上线缆会把转运器的6个面都用完。
 首次启动时，你需要提供所有容器相对于转运器的方向：
 1. 仓库 ("storage"), 用于储存所有纯种雄蜂和公主蜂 
