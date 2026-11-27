@@ -93,7 +93,7 @@ config.slot = {
 config.blockBreakerRedstoneInterval = 0.2
 
 config.imprintToleranceCycleLimit = 32
-config.imprintToleranceAdjustmentLimit = 12 -- Per tolerance trait and queen.
+config.imprintToleranceAdjustmentLimit = 3 -- Per trait if the queen still cannot tolerate the configured climate.
 
 -- With mutatron and imprinter, when we get a bee that has a gene in this list, 
 -- we immediately send it to the imprinter
