@@ -11,10 +11,10 @@ local modem = nil
 local lastRequirements = nil
 local inventoryPollInterval = 0.1
 
-local function getInventorySnapshot(side, size)
+local function getInventorySnapshot(side, size, readSlotsDirectly)
     local slots = {}
     -- getAll uses zero-based keys, including empty entries, on GTNH OpenComputers.
-    if size <= 108 and transposer.getAllStacks then
+    if not readSlotsDirectly and size <= 108 and transposer.getAllStacks then
         local snapshot = transposer.getAllStacks(side)
         if snapshot and snapshot.getAll then
             for index, item in pairs(snapshot.getAll()) do
@@ -363,6 +363,24 @@ local function storeStableOffspring(sideConfig, offspring, reserveDroneSlot)
     end
 end
 
+local function readScanResults(output, outputSize, readSlotsDirectly)
+    local offspring = {}
+    local scanned = {Princess = 0, Drone = 0}
+    local returned = {Princess = 0, Drone = 0}
+    for slot, bee in pairs(getInventorySnapshot(output, outputSize, readSlotsDirectly)) do
+        local beeType = bee.name == "Forestry:beePrincessGE" and "Princess"
+            or bee.name == "Forestry:beeDroneGE" and "Drone"
+        if beeType then
+            returned[beeType] = returned[beeType] + bee.size
+            if bee.individual and bee.individual.active and bee.individual.inactive then
+                offspring[slot] = bee
+                scanned[beeType] = scanned[beeType] + bee.size
+            end
+        end
+    end
+    return offspring, scanned, returned
+end
+
 local function getScannedOffspring(sideConfig)
     local outputSize = transposer.getInventorySize(sideConfig.output)
     local scannerSlots = math.min(5, transposer.getInventorySize(sideConfig.scanner))
@@ -416,28 +434,24 @@ local function getScannedOffspring(sideConfig)
 
     local lastProgress = computer.uptime()
     local nextReport = lastProgress + 5
+    local nextDirectRead = lastProgress
     local lastCount = 0
     while true do
-        local offspring = {}
-        local scanned = {Princess = 0, Drone = 0}
-        local unreadableCount = 0
-        for slot, bee in pairs(getInventorySnapshot(sideConfig.output, outputSize)) do
-            local _, beeType = utility.getItemName(bee)
-            if scanned[beeType] ~= nil then
-                if bee.individual.active and bee.individual.inactive then
-                    offspring[slot] = bee
-                    scanned[beeType] = scanned[beeType] + bee.size
-                else
-                    unreadableCount = unreadableCount + bee.size
-                end
-            elseif bee.name == "Forestry:beePrincessGE" or bee.name == "Forestry:beeDroneGE" then
-                unreadableCount = unreadableCount + bee.size
-            end
-        end
+        local offspring, scanned, returned = readScanResults(sideConfig.output, outputSize)
         if scanned.Princess >= expected.Princess and scanned.Drone >= expected.Drone then
             return offspring
         end
         local now = computer.uptime()
+        if now >= nextDirectRead then
+            offspring, scanned, returned = readScanResults(sideConfig.output, outputSize, true)
+            if scanned.Princess >= expected.Princess and scanned.Drone >= expected.Drone then
+                return offspring
+            end
+            if returned.Princess >= expected.Princess and returned.Drone >= expected.Drone then
+                error("本轮蜜蜂已全部回箱，但部分蜜蜂的显性或隐性基因不可读。请检查扫描仪的输出，蜜蜂仍留在输出箱。", 0)
+            end
+            nextDirectRead = computer.uptime() + 0.5
+        end
         local count = math.min(scanned.Princess, expected.Princess) + math.min(scanned.Drone, expected.Drone)
         if count > lastCount then
             lastCount = count
@@ -445,7 +459,8 @@ local function getScannedOffspring(sideConfig)
         end
         if now >= nextReport then
             local status = string.format("扫描结果：公主蜂 %d/%d，雄蜂 %d/%d，已回箱但基因不可读 %d 只。",
-                scanned.Princess, expected.Princess, scanned.Drone, expected.Drone, unreadableCount)
+                scanned.Princess, expected.Princess, scanned.Drone, expected.Drone,
+                returned.Princess + returned.Drone - scanned.Princess - scanned.Drone)
             if now - lastProgress >= config.offspringScanTimeout then
                 error(status .. " 等待扫描结果超时，蜜蜂仍留在装置中。", 0)
             end
@@ -2093,13 +2108,15 @@ function safeTransfer(sideIn, sideOut, amount, slot, sideInName, sideOutName, sl
         if not noWarn then
             print("转移物品失败，是不是箱子满了或者有杂物没拿出来")
         end
-        while transposer.getStackInSlot(sideIn, slot) ~= nil do
-            os.sleep(1)
+        local remaining = amount
+        while remaining > 0 and transposer.getStackInSlot(sideIn, slot) ~= nil do
+            os.sleep(inventoryPollInterval)
             if slotOut then
-                transposer.transferItem(sideIn, sideOut, amount, slot, slotOut)
+                transferSuccess = transposer.transferItem(sideIn, sideOut, remaining, slot, slotOut)
             else
-                transposer.transferItem(sideIn, sideOut, amount, slot)
+                transferSuccess = transposer.transferItem(sideIn, sideOut, remaining, slot)
             end
+            remaining = remaining - transferSuccess
         end
     end
 end
