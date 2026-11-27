@@ -207,6 +207,7 @@ elseif programMode:lower() == "imprint" then
         os.exit()
     end
     local templateSpecies,_ = util.getItemName(templateDrone)
+    local targetGenes = util.getImprintTargetGenes(templateDrone.individual.active, acclimatiserConfig)
     if targetBee ~= nil then
         local targetCount = beeCount[targetBee]
         if targetCount == nil or targetCount.Drone == nil then
@@ -250,7 +251,7 @@ elseif programMode:lower() == "imprint" then
             end
             local droneSlot = util.findBeeWithType(name, "Drone", sideConfig)
             local drone = transposer.getStackInSlot(sideConfig.storage, droneSlot)
-            if not (util.isGeneticallyEquivalent(drone, templateDrone, templateDrone.individual.active, true)) then
+            if not util.isGeneticallyEquivalent(drone, drone, targetGenes, true) then
                 if not util.convertPrincess(name, sideConfig, nil, breeder, acclimatiserConfig) then
                     goto continue
                 end

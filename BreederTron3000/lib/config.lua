@@ -92,6 +92,9 @@ config.slot = {
 -- time between block breaker redstone high->low
 config.blockBreakerRedstoneInterval = 0.2
 
+config.imprintToleranceCycleLimit = 32
+config.imprintToleranceAdjustmentLimit = 12 -- Per tolerance trait and queen.
+
 -- With mutatron and imprinter, when we get a bee that has a gene in this list, 
 -- we immediately send it to the imprinter
 config.forceImprintGenes = {

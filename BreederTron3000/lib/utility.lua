@@ -234,14 +234,14 @@ function utility.convertPrincess(beeName, sideConfig, droneReq, breeder, acclima
     return true
 end
 
-local function waitForBeeCycle(sideConfig, breeder, acclimatiserConfig)
+local function waitForBeeCycle(sideConfig, breeder, acclimatiserConfig, maximiseTolerance)
     local checkTolerance = breeder and acclimatiserConfig and acclimatiserConfig.useAcclimatiser
     while not cycleIsDone(sideConfig) do
         if checkTolerance and IsBeeCycleStarted(sideConfig) then
-            utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig)
+            utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig, maximiseTolerance)
             checkTolerance = false
         else
-            os.sleep(1)
+            os.sleep(checkTolerance and maximiseTolerance and 0.05 or 1)
         end
     end
 end
@@ -700,6 +700,37 @@ function utility.ensureGeneticEquivalence(princessSlot, droneSlot, sideConfig)
     return false
 end
 
+local maxTolerance = "BOTH_5"
+
+local function countMaxTolerance(bee)
+    if bee == nil then
+        return 0
+    end
+    local count = 0
+    for _, genes in ipairs({bee.individual.active, bee.individual.inactive}) do
+        if genes.temperatureTolerance == maxTolerance then
+            count = count + 1
+        end
+        if genes.humidityTolerance == maxTolerance then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+function utility.getImprintTargetGenes(templateGenes, acclimatiserConfig)
+    if not (acclimatiserConfig and acclimatiserConfig.useAcclimatiser) then
+        return templateGenes
+    end
+    local target = {}
+    for gene, value in pairs(templateGenes) do
+        target[gene] = value
+    end
+    target.temperatureTolerance = maxTolerance
+    target.humidityTolerance = maxTolerance
+    return target
+end
+
 function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, breeder, acclimatiserConfig)
     print("正在将模板基因压印到 " .. beeName .. " 蜂。")
     local size = transposer.getInventorySize(sideConfig.storage)
@@ -721,15 +752,25 @@ function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, breeder
     if templateGenes == nil then
         templateGenes = templateDrone.individual.active
     end
+    local targetGenes = utility.getImprintTargetGenes(templateGenes, acclimatiserConfig)
+    local stabiliseTolerance = targetGenes ~= templateGenes
+    local pairHasMaxTolerance = stabiliseTolerance and countMaxTolerance(basePrincess) == 4 and countMaxTolerance(baseDrone) == 4
+    local stabilisingTolerance = stabiliseTolerance and not pairHasMaxTolerance
+    local toleranceCycles = 0
 
-    if utility.isGeneticallyEquivalent(basePrincess, templateDrone, templateGenes, true) then
+    if (not stabiliseTolerance or pairHasMaxTolerance)
+        and utility.isGeneticallyEquivalent(basePrincess, stabiliseTolerance and baseDrone or templateDrone, targetGenes, true) then
         print("该蜂种已有模板基因，跳过压印。")
         return false
     end
 
 
     safeTransfer(sideConfig.storage, sideConfig.breeder, 1, basePrincessSlot, "storage", "breeder")
-    safeTransfer(sideConfig.storage, sideConfig.breeder, 1, size, "storage", "breeder") -- Last slot in storage is reserved for template bees.
+    local useBaseDrone = stabilisingTolerance or (pairHasMaxTolerance and utility.hasTargetGenes(basePrincess, baseDrone, targetGenes))
+    safeTransfer(sideConfig.storage, sideConfig.breeder, 1, useBaseDrone and baseDroneSlot or size, "storage", "breeder")
+    if not useBaseDrone then
+        pairHasMaxTolerance = pairHasMaxTolerance and countMaxTolerance(templateDrone) == 4
+    end
     
     local isImprinted = false
     local princess = nil
@@ -745,6 +786,7 @@ function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, breeder
     local bestReserveSlot = nil
     while not isImprinted do
         local scanCount = 0
+        local bestDroneTolerance = -1
         princessScore = 0
         princessPureness = 0
         princessSlot = nil
@@ -752,11 +794,10 @@ function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, breeder
         bestDronePureness = 0
         bestDroneSlot = nil
         scanCount = 0
-        waitForBeeCycle(sideConfig, breeder, acclimatiserConfig)
+        waitForBeeCycle(sideConfig, breeder, acclimatiserConfig, stabiliseTolerance and not pairHasMaxTolerance)
         scanCount = utility.dumpBreeder(sideConfig, true)
         if scanCount == 0 then
             print("蜂箱中的蜜蜂已被取出，请放回一只公主蜂和一只雄蜂。")
-            waitForBeeCycle(sideConfig, breeder, acclimatiserConfig)
             print("正在继续育种……")
             goto continue
         end
@@ -770,23 +811,46 @@ function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, breeder
             local _,type = utility.getItemName(bee)
             if type == "Princess" then
                 princess = bee
-                princessScore = utility.getGeneticScore(bee, templateGenes, basePrincess.individual.active.species, config.geneWeights)
+                princessScore = utility.getGeneticScore(bee, targetGenes, basePrincess.individual.active.species, config.geneWeights)
                 princessPureness = utility.getBeePureness(beeName, bee)
                 princessSlot = i
             else
-                local droneScore = utility.getGeneticScore(bee, templateGenes, basePrincess.individual.active.species, config.geneWeights)
-                if droneScore > bestDroneScore then
+                local droneScore = utility.getGeneticScore(bee, targetGenes, basePrincess.individual.active.species, config.geneWeights)
+                local pureness = utility.getBeePureness(beeName, bee)
+                -- Prefer drones of the original species before ranking their four tolerance alleles.
+                local droneTolerance = stabilisingTolerance and (pureness * 5 + countMaxTolerance(bee)) or 0
+                if droneTolerance > bestDroneTolerance or (droneTolerance == bestDroneTolerance and droneScore > bestDroneScore) then
                     bestDrone = bee
                     bestDroneScore = droneScore
-                    bestDronePureness = utility.getBeePureness(beeName, bee)
+                    bestDroneTolerance = droneTolerance
+                    bestDronePureness = pureness
                     bestDroneSlot = i
                 end
             end
         end
 
+        pairHasMaxTolerance = stabiliseTolerance and countMaxTolerance(princess) == 4 and countMaxTolerance(bestDrone) == 4
+        if stabilisingTolerance and (not pairHasMaxTolerance or princessPureness + bestDronePureness < 4) then
+            toleranceCycles = toleranceCycles + 1
+            if toleranceCycles >= config.imprintToleranceCycleLimit then
+                print("多轮自交后仍未固定温湿度耐受性，已将本轮后代送回存储箱。")
+                for i = 1, scanCount do
+                    safeTransfer(sideConfig.output, sideConfig.storage, 64, i, "output", "storage")
+                end
+                return false
+            end
+            print("正在选配同种后代，继续固定温湿度耐受性。")
+            continueImprinting(sideConfig, princessSlot, bestDroneSlot, scanCount)
+            goto continue
+        end
+        if stabilisingTolerance then
+            print("温度和湿度耐受性均已固定为全 5，继续压印其余基因。")
+            stabilisingTolerance = false
+        end
+
         local geneticSum = princessScore + bestDroneScore
         print("基因评分：" .. geneticSum .. "/" .. config.targetSum*2)
-        if (tostring(geneticSum) == tostring(config.targetSum*2)) then --Avoids floating point arithmetic errors
+        if (not stabiliseTolerance or pairHasMaxTolerance) and tostring(geneticSum) == tostring(config.targetSum*2) then
             print("基因压印成功。")
             print("正在将原有雄蜂移入杂物箱……")
             utility.dumpDrones(beeName, sideConfig)
@@ -799,10 +863,11 @@ function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, breeder
 
         if (princessPureness + bestDronePureness) == 4 then
             print("公主蜂和雄蜂均为原品种的纯合子。")
-            if utility.hasTargetGenes(princess, bestDrone, templateGenes) then
+            if utility.hasTargetGenes(princess, bestDrone, targetGenes, stabiliseTolerance) then
                 print("现有亲本可繁育出目标基因，继续繁育。")
                 continueImprinting(sideConfig, princessSlot, bestDroneSlot, scanCount)
             else
+                pairHasMaxTolerance = false
                 print("现有亲本无法繁育出目标基因，改用模板雄蜂。")
                 while (transposer.getStackInSlot(sideConfig.storage, size) == nil) do
                     print("模板雄蜂已用完，请补充。")
@@ -816,12 +881,13 @@ function utility.imprintFromTemplate(beeName, sideConfig, templateGenes, breeder
             end
 
         elseif (princessPureness + bestDronePureness) == 0 then
+            pairHasMaxTolerance = false
             print("后代已失去原品种。")
             print("正在查找备用雄蜂……")
             local bestReserveDrone = nil
             local bestReserveScore = -1
             local bestReserveSlot = nil
-            bestReserveScore, bestReserveSlot = getBestReserve(beeName, sideConfig, templateGenes, config.geneWeights)
+            bestReserveScore, bestReserveSlot = getBestReserve(beeName, sideConfig, targetGenes)
             if bestReserveSlot ~= nil then
                 bestReserveDrone = transposer.getStackInSlot(sideConfig.garbage, bestReserveSlot)
             end
@@ -954,9 +1020,9 @@ function dumpOutput(sideConfig, scanCount, additionalSlot)
         safeTransfer(sideConfig.output, sideConfig.garbage, 64, additionalSlot, "output", "garbage")
     end
 end
-function utility.hasTargetGenes(princess, drone, targetGenes)
+function utility.hasTargetGenes(princess, drone, targetGenes, adjustTolerance)
     for gene, value in pairs(targetGenes) do
-        if gene == "species" then
+        if gene == "species" or (adjustTolerance and (gene == "temperatureTolerance" or gene == "humidityTolerance")) then
         elseif type(value) == "table" then
             for tName, tValue in pairs(value) do
                 if princess.individual.active[gene][tName] ~= tValue and drone.individual.active[gene][tName] ~= tValue and 
@@ -1528,15 +1594,38 @@ local function waitForAcclimatiserOutput(sideConfig, timeout)
     end
 end
 
---- Adjust the tolerance of the queen bee if needed. 
----@param breeder any
----@param sideConfig any
----@param acclimatiserConfig any
-function utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig)
-    if not IsBeeCycleStarted(sideConfig) or breeder.canBreed() then
+local function adjustQueenTolerance(sideConfig, acclimatiserConfig, gene, machineSlot, machineName, isReady, maximiseTolerance)
+    local pendingSlot = config.slot.scanner.ToBeAcc
+    local attempts = 0
+    while true do
+        local queen = transposer.getStackInSlot(sideConfig.scanner, pendingSlot)
+        if maximiseTolerance then
+            if queen.individual.active[gene] == maxTolerance then
+                return true
+            end
+            if attempts >= config.imprintToleranceAdjustmentLimit then
+                return false
+            end
+        elseif isReady(queen) then
+            return true
+        end
+
+        safeTransfer(sideConfig.scanner, sideConfig.scanner, 1, pendingSlot, "scanner", machineName, machineSlot)
+        waitForAcclimatiserOutput(sideConfig, acclimatiserConfig.timeout)
+        safeTransfer(sideConfig.output, sideConfig.scanner, 1, 1, "output", "ToBeAcc", pendingSlot)
+        attempts = attempts + 1
+    end
+end
+
+function utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig, maximiseTolerance)
+    if not IsBeeCycleStarted(sideConfig) or (not maximiseTolerance and breeder.canBreed()) then
         return
     end
-    print("蜂后无法繁育，正在检查温湿度耐受性……")
+    if maximiseTolerance then
+        print("正在检查蜂后的温湿度全 5 耐受基因……")
+    else
+        print("蜂后无法繁育，正在检查温湿度耐受性……")
+    end
 
     print("正在触发拆除装置，从蜂箱取回蜂后。")
     component.redstone.setOutput(sideConfig.apiaryBreaker, 15)
@@ -1562,53 +1651,26 @@ function utility.adjustToleranceIfNeeded(breeder, sideConfig, acclimatiserConfig
         end
         safeTransfer(sideConfig.output, sideConfig.scanner, 64, 1, "output", "ToBeAcc", config.slot.scanner.ToBeAcc)
     end
-    bee = transposer.getStackInSlot(sideConfig.scanner, config.slot.scanner.ToBeAcc)
-
-    local temperatureOK = false
-    local humidityOK = false
-    local humidityRange, temperatureRange = nil, nil
-
-    while not (temperatureOK and humidityOK) do
-        -- temperature
-        while (transposer.getStackInSlot(sideConfig.scanner, config.slot.scanner.ToBeAcc) == nil) do
-            os.sleep(1)
-        end
-
-        bee = transposer.getStackInSlot(sideConfig.scanner, config.slot.scanner.ToBeAcc)
-        humidityRange, temperatureRange = utility.getQueenHumidityAndTemperatureRange(bee)
-        assert(humidityRange ~= nil, "无法读取蜂后的湿度耐受范围。")
-        assert(temperatureRange ~= nil, "无法读取蜂后的温度耐受范围。")
-        if temperatureRange.max < acclimatiserConfig.temperature or acclimatiserConfig.temperature < temperatureRange.min then
-            print("正在调整温度耐受性。")
-            safeTransfer(sideConfig.scanner, sideConfig.scanner, 64, config.slot.scanner.ToBeAcc, "scanner", "T+-Acc", config.slot.scanner.TempAcc)
-            waitForAcclimatiserOutput(sideConfig, acclimatiserConfig.timeout)
-            safeTransfer(sideConfig.output, sideConfig.scanner, 64, 1, "output", "ToBeAcc", config.slot.scanner.ToBeAcc)
-        else
-            temperatureOK = true
-        end
-
-        -- humidity
-        while (transposer.getStackInSlot(sideConfig.scanner, config.slot.scanner.ToBeAcc) == nil) do
-            os.sleep(1)
-        end
-        bee = transposer.getStackInSlot(sideConfig.scanner, config.slot.scanner.ToBeAcc)
-        humidityRange, temperatureRange = utility.getQueenHumidityAndTemperatureRange(bee)
-        assert(humidityRange ~= nil, "无法读取蜂后的湿度耐受范围。")
-        assert(temperatureRange ~= nil, "无法读取蜂后的温度耐受范围。")
-        if humidityRange.max < acclimatiserConfig.humidity or acclimatiserConfig.humidity < humidityRange.min then
-            print("正在调整湿度耐受性。")
-            safeTransfer(sideConfig.scanner, sideConfig.scanner, 64, config.slot.scanner.ToBeAcc, "scanner", "H+-Acc", config.slot.scanner.HumAcc)
-            waitForAcclimatiserOutput(sideConfig, acclimatiserConfig.timeout)
-            safeTransfer(sideConfig.output, sideConfig.scanner, 64, 1, "output", "ToBeAcc", config.slot.scanner.ToBeAcc)
-        else
-            humidityOK = true
-        end
-    end
+    local temperatureOK = adjustQueenTolerance(sideConfig, acclimatiserConfig, "temperatureTolerance",
+        config.slot.scanner.TempAcc, "T+-Acc", function(queen)
+            local _, range = utility.getQueenHumidityAndTemperatureRange(queen)
+            assert(range ~= nil, "无法读取蜂后的温度耐受范围。")
+            return range.min <= acclimatiserConfig.temperature and acclimatiserConfig.temperature <= range.max
+        end, maximiseTolerance)
+    local humidityOK = adjustQueenTolerance(sideConfig, acclimatiserConfig, "humidityTolerance",
+        config.slot.scanner.HumAcc, "H+-Acc", function(queen)
+            local range = utility.getQueenHumidityAndTemperatureRange(queen)
+            assert(range ~= nil, "无法读取蜂后的湿度耐受范围。")
+            return range.min <= acclimatiserConfig.humidity and acclimatiserConfig.humidity <= range.max
+        end, maximiseTolerance)
 
     -- finally we put the queen back to the breeder
     print("调整后的蜂后已移至蜂箱。")
     safeTransfer(sideConfig.scanner, sideConfig.breeder, 1, config.slot.scanner.ToBeAcc, "scanner", "breeder")
 
+    if not (temperatureOK and humidityOK) then
+        error("调整器未能将温湿度耐受性提升到全 5。蜂后已放回蜂箱，请检查双向耗材和超时设置。", 0)
+    end
     if (not breeder.canBreed()) and transposer.getStackInSlot(sideConfig.breeder, 1) ~= nil then
         print("警告：蜂后调整耐受性后仍无法繁育，请检查蜂后和蜂箱环境。")
     end
