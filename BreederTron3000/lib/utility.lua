@@ -272,15 +272,21 @@ end
 
 local maxTolerance = "BOTH_5"
 
-local function carriesMaxTolerance(bee, gene)
+local function countMaxToleranceAlleles(bee, gene)
     local individual = bee and bee.individual
-    return individual and ((individual.active and individual.active[gene] == maxTolerance)
-        or (individual.inactive and individual.inactive[gene] == maxTolerance))
+    if not individual then
+        return 0
+    end
+    return (individual.active and individual.active[gene] == maxTolerance and 1 or 0)
+        + (individual.inactive and individual.inactive[gene] == maxTolerance and 1 or 0)
 end
 
 local function getMissingTolerance(princess, drone)
-    local temperature = not (carriesMaxTolerance(princess, "temperatureTolerance") or carriesMaxTolerance(drone, "temperatureTolerance"))
-    local humidity = not (carriesMaxTolerance(princess, "humidityTolerance") or carriesMaxTolerance(drone, "humidityTolerance"))
+    -- A pure offspring needs a BOTH_5 allele from each parent for each trait.
+    local temperature = countMaxToleranceAlleles(princess, "temperatureTolerance") == 0
+        or countMaxToleranceAlleles(drone, "temperatureTolerance") == 0
+    local humidity = countMaxToleranceAlleles(princess, "humidityTolerance") == 0
+        or countMaxToleranceAlleles(drone, "humidityTolerance") == 0
     if temperature or humidity then
         return {temperatureTolerance = temperature, humidityTolerance = humidity}
     end
@@ -309,19 +315,7 @@ local function getToleranceScore(bee)
 end
 
 local function countMaxTolerance(bee)
-    if bee == nil then
-        return 0
-    end
-    local count = 0
-    for _, genes in ipairs({bee.individual.active, bee.individual.inactive}) do
-        if genes.temperatureTolerance == maxTolerance then
-            count = count + 1
-        end
-        if genes.humidityTolerance == maxTolerance then
-            count = count + 1
-        end
-    end
-    return count
+    return countMaxToleranceAlleles(bee, "temperatureTolerance") + countMaxToleranceAlleles(bee, "humidityTolerance")
 end
 
 local function storeRecoveredBee(sideConfig, outputSlot, count)
@@ -1938,7 +1932,7 @@ local function adjustQueenTolerance(sideConfig, acclimatiserConfig, gene, machin
     local attempts = 0
     while true do
         local queen = transposer.getStackInSlot(sideConfig.scanner, pendingSlot)
-        if isReady(queen) and (not improveTolerance or attempts > 0 or carriesMaxTolerance(queen, gene)) then
+        if isReady(queen) and (not improveTolerance or attempts > 0 or countMaxToleranceAlleles(queen, gene) == 2) then
             return true
         end
         if attempts >= config.imprintToleranceAdjustmentLimit then
