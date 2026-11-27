@@ -103,7 +103,7 @@ if programMode:lower() == "breed" or programMode:lower() == "imprint" then
     for name,data in pairs(beeCount) do
         if data["Princess"] ~= nil and data["Drone"] ~= nil then
             if data["Drone"] < 16 then
-                util.populateBee(name, sideConfig, 16, breeder, acclimatiserConfig)
+                util.populateBee(name, sideConfig, 16, breeder, acclimatiserConfig, programMode:lower() == "imprint")
             end
         end
     end
@@ -218,12 +218,12 @@ elseif programMode:lower() == "imprint" then
             if not util.convertPrincess(targetBee, sideConfig, nil, breeder, acclimatiserConfig) then
                 return
             end
-            util.populateBee(targetBee, sideConfig, 8, breeder, acclimatiserConfig)
+            util.populateBee(targetBee, sideConfig, 8, breeder, acclimatiserConfig, true)
         elseif targetCount.Drone < 8 then
-            util.populateBee(targetBee, sideConfig, 8, breeder, acclimatiserConfig)
+            util.populateBee(targetBee, sideConfig, 8, breeder, acclimatiserConfig, true)
         end
         if util.imprintFromTemplate(targetBee, sideConfig, templateDrone.individual.active, breeder, acclimatiserConfig) then
-            util.populateBee(targetBee, sideConfig, 32, breeder, acclimatiserConfig)
+            util.populateBee(targetBee, sideConfig, 32, breeder, acclimatiserConfig, true)
         end
     else
         for name,count in pairs(beeCount) do
@@ -232,10 +232,10 @@ elseif programMode:lower() == "imprint" then
             end
             if count.Princess ~= nil and count.Drone ~= nil then
                 if count.Drone < 8 then
-                    util.populateBee(name, sideConfig, 8, breeder, acclimatiserConfig)
+                    util.populateBee(name, sideConfig, 8, breeder, acclimatiserConfig, true)
                 end
                 if util.imprintFromTemplate(name, sideConfig, templateDrone.individual.active, breeder, acclimatiserConfig) then
-                    util.populateBee(name, sideConfig, 32, breeder, acclimatiserConfig)
+                    util.populateBee(name, sideConfig, 32, breeder, acclimatiserConfig, true)
                 end
                 beeCount[name] = nil
             end
@@ -255,9 +255,9 @@ elseif programMode:lower() == "imprint" then
                 if not util.convertPrincess(name, sideConfig, nil, breeder, acclimatiserConfig) then
                     goto continue
                 end
-                util.populateBee(name, sideConfig, 8, breeder, acclimatiserConfig)
+                util.populateBee(name, sideConfig, 8, breeder, acclimatiserConfig, true)
                 if util.imprintFromTemplate(name, sideConfig, templateDrone.individual.active, breeder, acclimatiserConfig) then
-                    util.populateBee(name, sideConfig, 32, breeder, acclimatiserConfig)
+                    util.populateBee(name, sideConfig, 32, breeder, acclimatiserConfig, true)
                 end
             else
                 print(string.format("%s 蜜蜂已有模板基因，跳过压印。", name))
